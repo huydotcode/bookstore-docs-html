@@ -18,6 +18,11 @@
 
     <header class="hero">
       <div class="container hero-inner">
+        <div style="margin-bottom: var(--space-1);">
+          <a href="index.html" class="btn-back" style="text-decoration: none; color: var(--accent-2); font-weight: 600; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 6px; transition: color 0.2s ease;">
+            &larr; Quay lại Cổng tài liệu (Hub)
+          </a>
+        </div>
         <p class="eyebrow">Đặc tả Kỹ thuật - Bookstore Microservices</p>
         <h1>Chức năng Đặt hàng & Thanh toán (Saga E2E)</h1>
         <p class="lead">
@@ -38,6 +43,9 @@
       <div class="container main-layout">
         <!-- Sticky Sidebar Navigation -->
         <aside class="sidebar">
+          <a href="index.html" class="btn outline" style="display: inline-block; margin-bottom: var(--space-3); text-decoration: none; font-size: 0.88rem; width: 100%; text-align: center; border-radius: var(--radius-sm); padding: 8px 14px;">
+            &larr; Quay lại Hub
+          </a>
           <nav class="sticky-nav" id="sidebar-nav">
             <p class="sidebar-title">Mục lục</p>
             <ul>
@@ -382,16 +390,17 @@
               Cơ chế Saga & Bù trừ
             </h2>
             <div class="card" style="margin-bottom: var(--space-4);">
-              <p class="kicker">12 Trạng thái của Saga Instance (Saga Lifecycle)</p>
+              <p class="kicker">16 Trạng thái của Saga Instance (Saga Lifecycle)</p>
               <p>
-                Vòng đời của một luồng checkout đi qua các trạng thái tuần tự dưới đây được ghi nhận tại bảng <code>saga_instances</code>:
+                Vòng đời của một luồng checkout đi qua các trạng thái và xử lý bù trừ dưới đây được ghi nhận tại bảng <code>saga_instance</code>:
               </p>
-              <div class="stack" style="margin-top: var(--space-2); margin-bottom: var(--space-2);">
+              <div class="stack" style="margin-top: var(--space-2); margin-bottom: var(--space-2); gap: 6px 10px;">
                 <span class="status-label stable">STARTED</span>
                 <span class="status-label stable">ORDER_CREATED</span>
                 <span class="status-label stable">STOCK_RESERVED</span>
                 <span class="status-label stable">PROMOTION_RESERVED</span>
                 <span class="status-label stable">PAYMENT_PENDING</span>
+                <span class="status-label stable">PAYMENT_SKIPPED</span>
                 <span class="status-label stable">PAYMENT_COMPLETED</span>
                 <span class="status-label stable">SHIPPING_CREATED</span>
                 <span class="status-label stable">ORDER_CONFIRMED</span>
@@ -399,9 +408,13 @@
                 <span class="status-label stable">PROMOTION_CONFIRMED</span>
                 <span class="status-label stable">CART_CLEARED</span>
                 <span class="status-label stable">COMPLETED</span>
+                <span class="status-label review">COMPENSATING</span>
+                <span class="status-label deprecated">FAILED</span>
+                <span class="status-label draft">EXPIRED</span>
               </div>
               <p style="font-size: 0.95rem;">
-                <em>Ghi chú:</em> Trạng thái <code>PAYMENT_SKIPPED</code> được áp dụng đối với các đơn hàng COD để bỏ qua bước tạo giao dịch thanh toán online.
+                * Trạng thái <code>PAYMENT_SKIPPED</code> được áp dụng đối với đơn hàng COD để bỏ qua bước thanh toán online.
+                * Trạng thái <code>COMPENSATING</code> kích hoạt khi một bước trung gian gặp sự cố, thực hiện rollback tự động.
               </p>
             </div>
 
@@ -554,7 +567,7 @@
                 <pre class="code-block">{
   "code": 1000,
   "message": "Checkout saga started",
-  "data": {
+  "result": {
     "sagaId": "4a7b1b34-8c65-4f5f-9d9f-a89e81b67272",
     "orderId": null,
     "status": "STARTED",
@@ -586,7 +599,7 @@
                 <pre class="code-block">{
   "code": 1000,
   "message": "Checkout saga loaded",
-  "data": {
+  "result": {
     "sagaId": "4a7b1b34-8c65-4f5f-9d9f-a89e81b67272",
     "orderId": "d80b7e41-0f62-4217-bc1a-6df261b0a8bb",
     "status": "PAYMENT_PENDING",
@@ -768,7 +781,7 @@
             <div class="grid-2">
               <!-- DB Schema Card -->
               <div class="card">
-                <p class="kicker">Cơ sở dữ liệu: bảng <code>saga_instances</code></p>
+                <p class="kicker">Cơ sở dữ liệu: bảng <code>saga_instance</code></p>
                 <div class="table-responsive" style="box-shadow: none;">
                   <table class="table-tech" style="font-size: 0.85rem;">
                     <thead>
@@ -779,14 +792,24 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <tr><td><code>saga_id</code></td><td>VARCHAR(36) [PK]</td><td>Mã định danh duy nhất của Saga.</td></tr>
-                      <tr><td><code>order_id</code></td><td>VARCHAR(36)</td><td>Mã đơn hàng được tạo tương ứng.</td></tr>
-                      <tr><td><code>status</code></td><td>VARCHAR(30)</td><td>Trạng thái hiện tại của luồng Saga.</td></tr>
-                      <tr><td><code>payment_method</code></td><td>VARCHAR(15)</td><td>VNPay, MoMo, ZaloPay hoặc COD.</td></tr>
-                      <tr><td><code>payment_id</code></td><td>VARCHAR(50)</td><td>Mã giao dịch từ cổng thanh toán.</td></tr>
-                      <tr><td><code>payment_url</code></td><td>TEXT</td><td>Đường link thanh toán được sinh ra.</td></tr>
+                      <tr><td><code>saga_id</code></td><td>VARCHAR(36) [PK]</td><td>Mã định danh duy nhất của Saga (UUID).</td></tr>
+                      <tr><td><code>order_id</code></td><td>VARCHAR(36)</td><td>Mã đơn hàng được tạo tương ứng (UUID).</td></tr>
+                      <tr><td><code>payment_id</code></td><td>VARCHAR(36)</td><td>ID thanh toán nội bộ liên kết (UUID).</td></tr>
+                      <tr><td><code>user_id</code></td><td>VARCHAR(255)</td><td>Mã định danh khách hàng đặt mua.</td></tr>
+                      <tr><td><code>address_id</code></td><td>VARCHAR(255)</td><td>Mã địa chỉ giao hàng nhận được.</td></tr>
+                      <tr><td><code>payment_method</code></td><td>VARCHAR(30)</td><td>COD, VNPAY, MOMO hoặc ZALOPAY.</td></tr>
+                      <tr><td><code>status</code></td><td>VARCHAR(30)</td><td>Trạng thái hiện tại của Saga (STARTED, COMPLETED...).</td></tr>
+                      <tr><td><code>discount_code</code></td><td>VARCHAR(50)</td><td>Mã giảm giá áp dụng (nếu có).</td></tr>
+                      <tr><td><code>discount_amount</code></td><td>DOUBLE</td><td>Số tiền giảm giá (được update khi giữ coupon).</td></tr>
+                      <tr><td><code>redirect_url</code></td><td>VARCHAR(255)</td><td>Đường link redirect về frontend khi thanh toán xong.</td></tr>
                       <tr><td><code>total_amount</code></td><td>DOUBLE</td><td>Tổng tiền đơn hàng sau giảm giá và ship.</td></tr>
-                      <tr><td><code>last_error</code></td><td>VARCHAR(255)</td><td>Chi tiết lỗi kỹ thuật nếu Saga thất bại.</td></tr>
+                      <tr><td><code>shipping_fee</code></td><td>DOUBLE</td><td>Phí vận chuyển thực tế tính từ shipping-service.</td></tr>
+                      <tr><td><code>payment_url</code></td><td>VARCHAR(1024)</td><td>Đường link thanh toán online tương ứng.</td></tr>
+                      <tr><td><code>shipping_order_code</code></td><td>VARCHAR(100)</td><td>Mã vận đơn giao hàng được khởi tạo.</td></tr>
+                      <tr><td><code>last_error</code></td><td>VARCHAR(1024)</td><td>Chi tiết lỗi kỹ thuật nếu Saga thất bại.</td></tr>
+                      <tr><td><code>compensation_stage</code></td><td>VARCHAR(30)</td><td>Giai đoạn bù trừ hiện tại nếu đang rollback.</td></tr>
+                      <tr><td><code>created_at</code></td><td>DATETIME</td><td>Thời gian khởi tạo luồng Saga.</td></tr>
+                      <tr><td><code>updated_at</code></td><td>DATETIME</td><td>Thời gian cập nhật gần nhất.</td></tr>
                     </tbody>
                   </table>
                 </div>

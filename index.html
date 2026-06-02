@@ -46,6 +46,7 @@
               <li><a href="#port-convention">Cấu hình Ports & DB</a></li>
               <li><a href="#feature-index">Danh mục Chức năng</a></li>
               <li><a href="#design-system">Quy chuẩn Thiết kế</a></li>
+              <li><a href="#presentation-qa">Hỏi đáp Phản biện</a></li>
             </ul>
           </nav>
         </aside>
@@ -172,8 +173,13 @@
                     <tr><td><code>cart-service</code></td><td>8080</td><td>8083</td><td>- (Redis)</td><td>Quản lý giỏ hàng tạm thời trên Redis.</td></tr>
                     <tr><td><code>order-service</code></td><td>8080</td><td>8084</td><td><code>bookstore_order</code></td><td>Quản lý đơn hàng và trạng thái đơn hàng.</td></tr>
                     <tr><td><code>payment-service</code></td><td>8080</td><td>8085</td><td><code>bookstore_payment</code></td><td>Giao tiếp cổng thanh toán trực tuyến.</td></tr>
-                    <tr><td><code>promotion-service</code></td><td>8080</td><td>8086</td><td><code>bookstore_promotion</code></td><td>Quản lý mã giảm giá, chiết khấu.</td></tr>
+                    <tr><td><code>promotion-service</code></td><td>8080</td><td>8086</td><td><code>bookstore_promotion_db</code></td><td>Quản lý mã giảm giá, chiết khấu.</td></tr>
+                    <tr><td><code>review-service</code></td><td>8080</td><td>8087</td><td><code>bookstore_review_db</code></td><td>Quản lý đánh giá và nhận xét sách.</td></tr>
                     <tr><td><code>shipping-service</code></td><td>8080</td><td>8088</td><td><code>bookstore_shipping</code></td><td>Tính phí ship, khởi tạo vận đơn giao vận.</td></tr>
+                    <tr><td><code>news-service</code></td><td>8080</td><td>8089</td><td><code>bookstore_news</code></td><td>Quản lý tin tức, bài viết.</td></tr>
+                    <tr><td><code>ai-service</code></td><td>8080</td><td>8090</td><td>-</td><td>Dịch vụ AI gợi ý sách và phân tích số liệu.</td></tr>
+                    <tr><td><code>notification-service</code></td><td>8080</td><td>8091</td><td><code>bookstore_notification</code></td><td>Gửi email và thông báo đẩy.</td></tr>
+                    <tr><td><code>saga-orchestrator-service</code></td><td>8080</td><td>8092</td><td><code>bookstore_saga</code></td><td>Điều phối giao dịch Saga checkout mua hàng.</td></tr>
                     <tr><td><code>frontend</code></td><td>3000</td><td>3000</td><td>-</td><td>Giao diện khách hàng Next.js.</td></tr>
                   </tbody>
                 </table>
@@ -240,6 +246,495 @@
                 <li>Trình bày theo cấu trúc chuẩn: Tiêu đề Kicker &rarr; Mô tả nghiệp vụ ngắn &rarr; Sơ đồ luồng (Mermaid.js) &rarr; Bảng tham số I/O &rarr; Ví dụ JSON Code block.</li>
                 <li>Mermaid.js phải cấu hình theme variables đồng bộ với tone kem ấm của tài liệu đặc tả để tránh lòe loẹt.</li>
               </ul>
+            </div>
+          </section>
+
+          <!-- Section 6: Presentation Q&A -->
+          <section class="section" id="presentation-qa" style="padding: var(--space-4) 0; border-top: 1px solid var(--line);">
+            <h2 class="section-title anchor-header">
+              <a href="#presentation-qa" class="anchor-link">#</a>
+              Bộ Hỏi Đáp Báo Cáo & Phản Biện
+            </h2>
+            <p class="lead" style="margin-bottom: var(--space-4);">
+              Tổng hợp 21 câu hỏi cốt lõi về kiến trúc, kỹ thuật và phản biện thường gặp của giảng viên phản bên đối với đề tài Bookstore Platform.
+            </p>
+
+            <style>
+              .qa-group {
+                margin-bottom: var(--space-4);
+              }
+              .qa-group-title {
+                font-family: 'Lora', serif;
+                font-size: 1.25rem;
+                color: var(--accent-2);
+                margin-bottom: var(--space-3);
+                padding-bottom: var(--space-1);
+                border-bottom: 2px solid var(--line);
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+              }
+              .qa-card {
+                background: var(--surface);
+                border: 1px solid var(--line);
+                border-radius: var(--radius-sm);
+                margin-bottom: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
+                transition: all 0.22s ease;
+              }
+              .qa-card[open] {
+                border-color: var(--accent-2);
+                box-shadow: var(--shadow);
+              }
+              .qa-summary {
+                font-weight: 600;
+                cursor: pointer;
+                padding: var(--space-1) 0;
+                outline: none;
+                user-select: none;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                font-size: 0.96rem;
+                color: var(--ink);
+              }
+              .qa-summary::-webkit-details-marker {
+                display: none;
+              }
+              .qa-summary::after {
+                content: "+";
+                font-size: 1.2rem;
+                color: var(--accent-2);
+                font-weight: bold;
+                transition: transform 0.2s ease;
+              }
+              .qa-card[open] .qa-summary::after {
+                content: "−";
+                transform: rotate(180deg);
+              }
+              .qa-content {
+                padding-top: var(--space-2);
+                border-top: 1px dashed var(--line);
+                margin-top: var(--space-1);
+                font-size: 0.94rem;
+                line-height: 1.7;
+                color: var(--ink);
+              }
+              .qa-content p {
+                margin-bottom: var(--space-2);
+              }
+              .qa-content ol, .qa-content ul {
+                padding-left: var(--space-3);
+                margin-bottom: var(--space-2);
+              }
+              .qa-content li {
+                margin-bottom: var(--space-1);
+              }
+              .qa-badge {
+                font-family: monospace;
+                padding: 2px 8px;
+                border-radius: 6px;
+                font-size: 0.72rem;
+                font-weight: 700;
+                color: #ffffff;
+                text-transform: uppercase;
+                margin-right: 8px;
+                flex-shrink: 0;
+              }
+              .qa-badge.arch { background: #6366f1; }
+              .qa-badge.tech { background: #10b981; }
+              .qa-badge.ops { background: #d97706; }
+              .qa-badge.crit { background: #ef4444; }
+            </style>
+
+            <!-- Group 1: Architecture -->
+            <div class="qa-group">
+              <h3 class="qa-group-title">
+                <span class="qa-badge arch">Arch</span> Phần 1: Kiến trúc Hệ thống (Architecture)
+              </h3>
+
+              <!-- Q1 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 4a: Dự án đang áp dụng mô hình kiến trúc nào?</summary>
+                <div class="qa-content">
+                  <p>Hệ thống áp dụng kiến trúc <strong>Microservices (Dịch vụ siêu nhỏ)</strong> phối hợp với <strong>Event-Driven Architecture (Kiến trúc hướng sự kiện)</strong>.</p>
+                  <p>Hệ thống bao gồm 14 thành phần độc lập hoạt động chéo qua hạ tầng mạng:</p>
+                  <ul>
+                    <li><strong>Next.js Frontend (BFF):</strong> Giao diện người dùng và xử lý các proxy API nghiệp vụ phía Client.</li>
+                    <li><strong>API Gateway (Spring Cloud Gateway):</strong> Cổng ngõ duy nhất tiếp nhận request, định tuyến động, xác thực JWT và lọc bảo mật.</li>
+                    <li><strong>11 Microservices nghiệp vụ:</strong> Tách biệt theo từng Bounded Context (user, book, cart, order, payment, promotion, review, shipping, news, notification, ai).</li>
+                    <li><strong>Saga Orchestrator Service:</strong> Dịch vụ trung tâm điều phối trạng thái giao dịch phân tán (Distributed Transaction).</li>
+                  </ul>
+                </div>
+              </details>
+
+              <!-- Q2 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 4b: Giải thích lý do lựa chọn kiến trúc Microservices cho đề tài?</summary>
+                <div class="qa-content">
+                  <p>Chúng em lựa chọn kiến trúc này thay vì Monolith vì 3 lý do chiến lược:</p>
+                  <ol>
+                    <li><strong>Phù hợp với mô hình làm việc nhóm (Parallel Development):</strong> Nhóm có 5 thành viên phát triển song song. Mỗi người phụ trách các dịch vụ hoàn toàn độc lập (ví dụ: Trường làm User & Saga; Huy làm Order & Payment; Sang làm Cart & News; Thái làm Book, Shipping & AI; Hiền làm Promotion, Review & Notification) mà không sợ xung đột mã nguồn hay ảnh hưởng chéo (Fault Isolation).</li>
+                    <li><strong>Khả năng co giãn độc lập (Independent Scaling):</strong> Các dịch vụ có lưu lượng truy cập cao như <code>book-service</code> (tìm sách) hay <code>cart-service</code> (giỏ hàng) có thể dễ dàng scale-out (nhân bản pod) mà không cần cấp tài nguyên vô ích cho các service tải thấp.</li>
+                    <li><strong>Áp dụng cô lập dữ liệu (Database-per-Service):</strong> Loại bỏ nghẽn cổ chai DB chung. Lỗi cơ sở dữ liệu của một service không làm sập toàn bộ luồng nghiệp vụ chính của hệ thống.</li>
+                  </ol>
+                </div>
+              </details>
+
+              <!-- Q3 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 4c: Kiến trúc giải quyết cụ thể các thuộc tính chất lượng (Quality Attributes) nào?</summary>
+                <div class="qa-content">
+                  <div class="table-responsive">
+                    <table class="table-tech">
+                      <thead>
+                        <tr>
+                          <th>Thuộc tính chất lượng</th>
+                          <th>Giải pháp kiến trúc</th>
+                          <th>Chi tiết kỹ thuật áp dụng</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td><strong>Availability (Sẵn sàng)</strong></td>
+                          <td>Cô lập lỗi & Giao tiếp bất đồng bộ</td>
+                          <td>Sử dụng RabbitMQ Broker. Khi notification-service sập, luồng mua hàng vẫn chạy bình thường; các tin nhắn sẽ được xử lý lại khi service khôi phục. Dùng OpenFeign Retry & Fallback.</td>
+                        </tr>
+                        <tr>
+                          <td><strong>Scalability (Mở rộng)</strong></td>
+                          <td>Containerization & Caching</td>
+                          <td>Đóng gói Docker, triển khai K8s co giãn ngang (HPA) dựa theo CPU/RAM thực tế. Sử dụng Redis Cache cho giỏ hàng giúp giải phóng tải cho database MySQL.</td>
+                        </tr>
+                        <tr>
+                          <td><strong>Security (Bảo mật)</strong></td>
+                          <td>Centralized Auth & Cryptography</td>
+                          <td>Xác thực JWT khóa bất đối xứng RS256 tại Gateway (verify bằng Public Key). Chặn request bên ngoài gọi trực tiếp vào microservices bằng mô hình bảo mật Trust-Header nội bộ.</td>
+                        </tr>
+                        <tr>
+                          <td><strong>Performance (Hiệu năng)</strong></td>
+                          <td>Caching, CDN & Vector Search</td>
+                          <td>Lưu cache giỏ hàng Redis, phân phối tài nguyên ảnh qua Cloudinary CDN, và truy vấn Vector Search cực nhanh trên bộ nhớ RAM của Qdrant Cloud cho tính năng tìm kiếm ngữ nghĩa.</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </details>
+
+              <!-- Q4 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 4d: Cơ chế quản lý sự phụ thuộc (Dependencies) giữa các thành phần ra sao?</summary>
+                <div class="qa-content">
+                  <p>Hệ thống tuân thủ nguyên lý <strong>Khớp nối lỏng (Loosely Coupled)</strong> qua hai phương thức giao tiếp:</p>
+                  <ul>
+                    <li><strong>Giao tiếp đồng bộ (Synchronous Coupling) tối thiểu:</strong> Gọi trực tiếp qua OpenFeign khi cần dữ liệu tức thời (như <code>cart-service</code> gọi <code>book-service</code> để lấy thông tin sách và kiểm tra tồn kho khi cập nhật giỏ hàng). Đặt cấu hình timeout (Connect/Read Timeout) chặt chẽ để tránh lỗi nghẽn lan truyền (Cascade Failure).</li>
+                    <li><strong>Giao tiếp bất đồng bộ (Asynchronous Coupling) chủ đạo:</strong> Giao tiếp chéo qua RabbitMQ Topic Exchange (gửi nhận lệnh/sự kiện). Các service hoàn toàn không biết về sự tồn tại của nhau, triệt tiêu sự phụ thuộc cứng về mặt mạng nội bộ.</li>
+                  </ul>
+                </div>
+              </details>
+
+              <!-- Q5 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 4e: Làm thế nào hệ thống đảm bảo tính nhất quán dữ liệu (Data Consistency)?</summary>
+                <div class="qa-content">
+                  <p>Vì áp dụng <strong>Database-per-Service</strong>, hệ thống không thể sử dụng Transaction ACID của DB truyền thống. Nhóm áp dụng cơ chế <strong>Nhất quán sau (Eventual Consistency)</strong> bằng mô hình <strong>Saga Orchestrator Pattern</strong>:</p>
+                  <ul>
+                    <li>Dịch vụ <code>saga-orchestrator-service</code> điều phối luồng Checkout thông qua máy trạng thái (State Machine) truyền đi qua RabbitMQ.</li>
+                    <li><strong>Luồng thành công (Happy Path):</strong> Trải qua 7 bước: Tạo đơn nháp &rarr; Giữ kho sách &rarr; Áp mã voucher &rarr; Tạo link thanh toán &rarr; Khởi tạo vận đơn &rarr; Xóa giỏ hàng &rarr; Hoàn thành.</li>
+                    <li><strong>Luồng bù trừ (Compensation Path - Rollback):</strong> Nếu bất kỳ bước trung gian nào bị lỗi (như cổng thanh toán báo thất bại, GHN từ chối đơn), Orchestrator tự động gửi các tin nhắn lệnh bù (Compensation Commands) để hoàn trả trạng thái cũ: nhả tồn kho sách, hoàn lại mã giảm giá, và chuyển trạng thái đơn hàng sang <code>CANCELLED</code>.</li>
+                  </ul>
+                </div>
+              </details>
+
+              <!-- Q6 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 4f: Mô tả luồng đi của một Request tìm kiếm AI (Semantic Search) từ UI đến DB?</summary>
+                <div class="qa-content">
+                  <p>Sơ đồ luồng đi của yêu cầu tìm kiếm ngữ nghĩa:</p>
+                  <ol>
+                    <li><strong>Client (Next.js):</strong> Gửi request HTTP GET <code>/api/v1/books/search?q=Sách kinh tế&ai=true</code> đính kèm Token JWT.</li>
+                    <li><strong>API Gateway (Port 8080):</strong> Bóc tách Token verify bằng Public Key, chuyển đổi thông tin thành headers nội bộ (<code>X-User-Id</code>, <code>X-User-Role</code>), rồi định tuyến sang <code>book-service</code>.</li>
+                    <li><strong>Book Service (Port 8082):</strong> Nhận diện tham số <code>ai=true</code>, gọi nội bộ chéo sang <code>ai-service</code>.</li>
+                    <li><strong>AI Service (Port 8090):</strong> Gọi REST API sang Google Gemini (model <code>text-embedding-004</code>) để chuyển câu query thành mảng Vector số thực 768 chiều (Embedding Vector).</li>
+                    <li><strong>Qdrant Vector DB:</strong> <code>book-service</code> nhận vector từ <code>ai-service</code> và so sánh độ đo khoảng cách Cosine trên Qdrant Cloud để tìm ra Top 5 ID sách phù hợp nhất về mặt ý nghĩa.</li>
+                    <li><strong>MySQL (bookstore_book):</strong> Truy vấn SQL <code>SELECT * FROM books WHERE id IN (...)</code> để lấy chi tiết sách tương ứng với các ID tìm được.</li>
+                    <li><strong>Response:</strong> Trả về ApiResponse chuẩn hóa cho Gateway &rarr; Gateway chuyển ngược về trình duyệt của khách hàng để render.</li>
+                  </ol>
+                </div>
+              </details>
+
+              <!-- Q7 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 4g: Tại sao sử dụng Redis? Chiến lược lưu trữ và hết hạn bộ đệm thế nào?</summary>
+                <div class="qa-content">
+                  <p>Hệ thống sử dụng Redis cho hai tác vụ lưu trữ phân tán hiệu năng cao:</p>
+                  <div class="table-responsive">
+                    <table class="table-tech">
+                      <thead>
+                        <tr>
+                          <th>Nghiệp vụ lưu trữ</th>
+                          <th>Cấu trúc Key</th>
+                          <th>Thời gian hết hạn (TTL)</th>
+                          <th>Lý do và chiến lược xóa</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td><strong>Giỏ hàng tạm thời (cart-service)</strong></td>
+                          <td><code>cart:{userId}</code></td>
+                          <td>7 Ngày (7 Days)</td>
+                          <td>Giỏ hàng thay đổi liên tục. Lưu vào Redis giảm tải I/O cho MySQL. Xóa key này khi checkout hoàn tất.</td>
+                        </tr>
+                        <tr>
+                          <td><strong>Mã OTP xác thực (user-service)</strong></td>
+                          <td><code>otp:{email}</code></td>
+                          <td>5 Phút (5 Mins)</td>
+                          <td>Redis tự động giải phóng bộ nhớ khi hết hạn mà không cần viết scheduler quét thủ công trong database.</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </details>
+
+              <!-- Q8 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 4h: Điểm nghẽn (Bottlenecks) và sự đánh đổi (Trade-offs) của kiến trúc Microservices?</summary>
+                <div class="qa-content">
+                  <p>Ba điểm đánh đổi lớn nhất của hệ thống:</p>
+                  <ul>
+                    <li><strong>Đánh đổi tính nhất quán tức thời (Immediate Consistency):</strong> Chấp nhận nhất quán sau (Eventual Consistency) &rarr; Code Saga và các luồng rollback phức tạp hơn Monolith rất nhiều.</li>
+                    <li><strong>Độ trễ mạng (Network Latency):</strong> Giao tiếp chéo qua các service thông qua Feign/RabbitMQ tốn thời gian hơn gọi trong bộ nhớ &rarr; Tối ưu bằng cách cache Redis giỏ hàng và thiết lập cơ chế nạp sẵn dữ liệu (Eager Loading).</li>
+                    <li><strong>Single Point of Failure (SPOF) tại API Gateway:</strong> Nếu API Gateway sập, hệ thống tê liệt hoàn toàn &rarr; Khắc phục bằng cách chạy song song nhiều Gateway đằng sau Load Balancer (Nginx/AWS ALB).</li>
+                  </ul>
+                </div>
+              </details>
+            </div>
+
+            <!-- Group 2: Tech & Design Patterns -->
+            <div class="qa-group">
+              <h3 class="qa-group-title">
+                <span class="qa-badge tech">Tech</span> Phần 2: Kỹ thuật & Mẫu thiết kế (Design Patterns)
+              </h3>
+
+              <!-- Q9 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 5a: Các mẫu thiết kế (Design Patterns) nào được áp dụng trong dự án?</summary>
+                <div class="qa-content">
+                  <p>Hệ thống áp dụng các patterns từ kiến trúc đến mã nguồn:</p>
+                  <ul>
+                    <li><strong>API Gateway Pattern:</strong> Điểm tập trung định tuyến, cấu hình CORS, giải mã Token tập trung tại Gateway.</li>
+                    <li><strong>Database-per-Service Pattern:</strong> Độc lập lưu trữ cho từng miền nghiệp vụ.</li>
+                    <li><strong>Saga Orchestrator Pattern:</strong> Quản lý luồng giao dịch phân tán.</li>
+                    <li><strong>BFF (Backend-for-Frontend) Pattern:</strong> Next.js Route Handlers proxy các API nghiệp vụ để che giấu ports microservices và bypass lọc JWT khi không cần thiết.</li>
+                    <li><strong>Observer Pattern (Publish-Subscribe):</strong> Gửi sự kiện qua RabbitMQ Topic Exchange (ví dụ: event <code>order.created</code> được cả <code>saga-orchestrator</code> và <code>notification-service</code> độc lập tiêu thụ).</li>
+                    <li><strong>Builder Pattern (Lombok @Builder):</strong> Hỗ trợ khởi tạo đối tượng sạch sẽ.</li>
+                    <li><strong>Singleton Pattern:</strong> Quản lý các Spring Beans mặc định bởi Spring IoC Container.</li>
+                  </ul>
+                </div>
+              </details>
+
+              <!-- Q10 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 5b: Mô hình CQRS (Command Query Responsibility Segregation) áp dụng ra sao?</summary>
+                <div class="qa-content">
+                  <p>Hệ thống tách biệt nhánh đọc/ghi ở mức dữ liệu được tối ưu hóa:</p>
+                  <ul>
+                    <li><strong>Nhánh Ghi (Command):</strong> Đảm bảo tính toàn vẹn nghiệp vụ ACID bằng cách ghi trực tiếp xuống các bảng quan hệ của MySQL Databases (như tạo đơn hàng, cập nhật sách).</li>
+                    <li><strong>Nhánh Đọc (Query):</strong> Tối ưu hóa tốc độ đọc bằng cách nạp dữ liệu sang Redis Cache (cho giỏ hàng) và Qdrant Vector DB (cho tìm kiếm nhanh).</li>
+                    <li><strong>Cơ chế đồng bộ:</strong> Khi có thay đổi dữ liệu (Admin sửa sách), hệ thống kích hoạt bất đồng bộ cập nhật sang Vector DB Qdrant và làm mới bộ đệm.</li>
+                  </ul>
+                </div>
+              </details>
+
+              <!-- Q11 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 5c: Hệ thống có sử dụng Event Sourcing hay không?</summary>
+                <div class="qa-content">
+                  <p>Hệ thống <strong>KHÔNG</strong> sử dụng Event Sourcing thuần túy.</p>
+                  <p><strong>Lý do:</strong> Việc lưu trữ mọi sự kiện nhỏ thay đổi trạng thái và replay lại để tính toán trạng thái hiện tại là quá phức tạp, tốn dung lượng ổ đĩa và không cần thiết cho ứng dụng e-commerce tầm trung.</p>
+                  <p><strong>Giải pháp thay thế:</strong> Lưu trạng thái hiện tại (State-based) vào bảng MySQL chuẩn (sử dụng cột <code>status</code> dạng Enum) kết hợp ghi log lịch sử (Audit Log) chi tiết vào bảng <code>saga_step_log</code> ở Orchestrator để quản lý vết giao dịch.</p>
+                </div>
+              </details>
+
+              <!-- Q12 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 5d: Chi tiết các thành phần xử lý đồng bộ và bất đồng bộ trong hệ thống?</summary>
+                <div class="qa-content">
+                  <div class="table-responsive">
+                    <table class="table-tech">
+                      <thead>
+                        <tr>
+                          <th>Loại giao tiếp</th>
+                          <th>Công nghệ sử dụng</th>
+                          <th>Nghiệp vụ áp dụng tiêu biểu</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td><strong>Đồng bộ (Synchronous)</strong></td>
+                          <td>Spring Cloud OpenFeign (HTTP REST)</td>
+                          <td>
+                            - <code>cart-service</code> gọi <code>book-service</code> lấy giá và tồn kho thực tế.<br>
+                            - <code>order-service</code> gọi <code>book-service</code> lấy snapshot thông tin sách.<br>
+                            - <code>ai-service</code> gọi lấy ngữ cảnh dữ liệu của user/book/order.
+                          </td>
+                        </tr>
+                        <tr>
+                          <td><strong>Bất đồng bộ (Asynchronous)</strong></td>
+                          <td>RabbitMQ Message Broker</td>
+                          <td>
+                            - Luồng điều phối Checkout Saga giữa các dịch vụ thành phần.<br>
+                            - Gửi email OTP (<code>user.registered</code> &rarr; <code>notification-service</code>).<br>
+                            - Nhận callback IPN cập nhật kết quả giao dịch thanh toán từ VNPay/ZaloPay.
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </details>
+
+              <!-- Q13 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 5e: Cách quản lý phiên bản và cập nhật cấu trúc cơ sở dữ liệu (Database Migration)?</summary>
+                <div class="qa-content">
+                  <p>Giải pháp quản trị DB chia theo 2 môi trường:</p>
+                  <ul>
+                    <li><strong>Môi trường Dev:</strong> Sử dụng cấu hình tự động ánh xạ Hibernate <code>spring.jpa.hibernate.ddl-auto: update</code> giúp phát triển nhanh, liên tục sửa đổi schema không cần tạo script thủ công.</li>
+                    <li><strong>Định hướng Production:</strong> Tích hợp công cụ <strong>Flyway</strong> chạy trực tiếp trong CI/CD pipeline. Mọi thay đổi DB được viết thành script SQL đánh số phiên bản rõ ràng (như <code>V1__init.sql</code>, <code>V2__add_index.sql</code>) để nâng cấp tuần tự an toàn, tránh mất mát dữ liệu.</li>
+                  </ul>
+                </div>
+              </details>
+            </div>
+
+            <!-- Group 3: DevOps & AI -->
+            <div class="qa-group">
+              <h3 class="qa-group-title">
+                <span class="qa-badge ops">Ops</span> Phần 3: DevOps, Triển khai & Tích hợp AI
+              </h3>
+
+              <!-- Q14 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 6a: Quy trình tự động hóa kiểm thử và triển khai (CI/CD) của dự án?</summary>
+                <div class="qa-content">
+                  <p>Quy trình chạy tự động qua <strong>Jenkins Server</strong> và <strong>GitHub Webhook</strong>:</p>
+                  <ol>
+                    <li><strong>Trigger:</strong> Developer đẩy code lên GitHub &rarr; Webhook kích hoạt Pipeline tự động trên Jenkins.</li>
+                    <li><strong>Jenkinsfile Pipeline:</strong>
+                      <ul>
+                        <li><strong>Stage 1 (Checkout):</strong> Pull source code mới nhất về workspace.</li>
+                        <li><strong>Stage 2 (Build & Test):</strong> Biên dịch file `.jar` và chạy unit tests bằng lệnh Maven: <code>./mvnw clean package</code>.</li>
+                        <li><strong>Stage 3 (Docker Build):</strong> Đóng gói file `.jar` thành Docker Image.</li>
+                        <li><strong>Stage 4 (Push Registry):</strong> Jenkins push Image lên Docker Hub registry với namespace: <code>truongikpk/bookstore-&lt;service&gt;:&lt;tag&gt;</code>.</li>
+                        <li><strong>Stage 5 (Deploy):</strong> Gửi lệnh SSH sang server kéo image mới và chạy <code>docker compose up -d</code>.</li>
+                      </ul>
+                    </li>
+                  </ol>
+                </div>
+              </details>
+
+              <!-- Q15 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 6b: Cơ chế đóng gói tối ưu bằng Docker Multi-stage Build?</summary>
+                <div class="qa-content">
+                  <p>Nhóm sử dụng cơ chế đóng gói Multi-stage để giảm tối đa kích thước ảnh chạy runtime:</p>
+                  <ul>
+                    <li><strong>Stage 1 (Build Stage):</strong> Sử dụng image <code>maven:3.9-eclipse-temurin-21</code> chứa toàn bộ thư viện biên dịch để build ra file <code>.jar</code> thực thi.</li>
+                    <li><strong>Stage 2 (Runtime Stage):</strong> Sử dụng image runtime siêu gọn nhẹ <code>eclipse-temurin:21-jre</code> (không chứa SDK hay Maven), sao chép file <code>.jar</code> từ Stage 1 sang và chạy lệnh khởi động.</li>
+                    <li><strong>Hiệu quả:</strong> Giảm dung lượng Docker Image từ <strong>~800MB</strong> xuống chỉ còn <strong>~250MB</strong>, giúp deploy nhanh và tiết kiệm băng thông mạng.</li>
+                  </ul>
+                </div>
+              </details>
+
+              <!-- Q16 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 6c: Cơ chế giám sát hệ thống (Monitoring) và gom log lỗi?</summary>
+                <div class="qa-content">
+                  <p>Giải pháp giám sát hiệu năng phân tán:</p>
+                  <ul>
+                    <li><strong>Hiện tại:</strong> Bật <code>Spring Boot Actuator</code> cung cấp endpoint <code>/actuator/health</code> cho Docker Compose healthcheck cô lập container lỗi.</li>
+                    <li><strong>Lộ trình Production:</strong>
+                      <ol>
+                        <li><strong>Gom log tập trung (Centralized Logging):</strong> Sử dụng ELK Stack (Elasticsearch, Logstash, Kibana) hoặc OpenSearch thu thập log lỗi stdout của 14 container về một Dashboard duy nhất.</li>
+                        <li><strong>Giám sát tài nguyên:</strong> Sử dụng Prometheus định kỳ cào thông số hiệu năng của Actuator và vẽ biểu đồ trực quan hóa tài nguyên qua Grafana.</li>
+                      </ol>
+                    </li>
+                  </ul>
+                </div>
+              </details>
+
+              <!-- Q17 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 6d: Giải pháp tích hợp trí tuệ nhân tạo (LLM) vào kiến trúc hệ thống?</summary>
+                <div class="qa-content">
+                  <p>Hệ thống tích hợp LLM (Google Gemini) qua 4 tính năng thực tế:</p>
+                  <ul>
+                    <li><strong>AI Search ngữ nghĩa:</strong> Tạo embedding văn bản thông tin sách lưu trữ vào Qdrant Vector DB để đối sánh ngữ nghĩa Cosine Similarity với câu truy vấn tự nhiên.</li>
+                    <li><strong>AI Chatbot tư vấn:</strong> Sử dụng kỹ thuật <strong>Tool Calling (Function Calling)</strong> của Gemini. Chatbot có thể tự nhận biết khi nào cần kích hoạt các API Feign client để nạp thông tin sách, đơn hàng thực tế trong DB nhằm đưa ra câu trả lời chính xác, tránh bịa đặt thông tin.</li>
+                    <li><strong>AI Sinh báo cáo:</strong> Phân tích số liệu doanh thu thô dưới dạng báo cáo phân tích tiếng Việt chuyên nghiệp cho Admin.</li>
+                    <li><strong>AI Hỗ trợ viết blog:</strong> Trợ lý AI tích hợp trực tiếp vào CKEditor để sinh bài viết bài đăng nhanh chóng.</li>
+                  </ul>
+                </div>
+              </details>
+            </div>
+
+            <!-- Group 4: Panel Q&A -->
+            <div class="qa-group">
+              <h3 class="qa-group-title">
+                <span class="qa-badge crit">Crit</span> Phần 4: Bộ Hỏi Đáp Phản Biện Của Giảng Viên
+              </h3>
+
+              <!-- Q18 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 1: Tại sao sử dụng Trust-Header (ADR-006) thay vì để các microservice phía sau tự xác thực JWT?</summary>
+                <div class="qa-content">
+                  <p>Chúng em đưa ra quyết định thiết kế này vì 2 lý do cốt lõi:</p>
+                  <ol>
+                    <li><strong>Hiệu năng (Performance):</strong> Verify chữ ký JWT là tác vụ tốn CPU. Nếu n request đi qua 4 service nội bộ mà service nào cũng phải verify JWT thì sẽ bị lãng phí CPU lặp đi lặp lại vô nghĩa. Gateway chỉ cần verify 1 lần duy nhất ở đầu vào.</li>
+                    <li><strong>Cô lập mạng nội bộ (Network Isolation):</strong> Trong thực tế triển khai, các microservices nằm hoàn toàn trong mạng nội bộ kín (Docker Network/K8s Cluster) và không mở cổng (expose port) ra internet. API Gateway là cổng duy nhất hướng ra ngoài. Do đó, các microservice hoàn toàn tin tưởng request gửi đến chúng chắc chắn đã được kiểm tra an toàn bởi Gateway và chỉ cần đọc thông tin định danh ở Header (<code>X-User-Id</code>, <code>X-User-Role</code>) để xử lý nghiệp vụ.</li>
+                  </ol>
+                </div>
+              </details>
+
+              <!-- Q19 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 2: Làm sao đảm bảo tính Idempotency khi nhận IPN callback từ cổng thanh toán nhiều lần do lỗi mạng?</summary>
+                <div class="qa-content">
+                  <p>Nhóm giải quyết bài toán trùng lặp callback bằng cơ chế <strong>Processed Message Store</strong>:</p>
+                  <ul>
+                    <li>Mỗi giao dịch gửi sang VNPay/ZaloPay/MoMo đều gắn kèm mã định danh duy nhất (<code>transactionId</code> / <code>apptransid</code>).</li>
+                    <li>Tại database của <code>payment-service</code>, chúng em thiết kế bảng <code>processed_message</code> với khóa chính là <code>event_id</code> (hoặc <code>transactionId</code>).</li>
+                    <li>Khi nhận callback IPN lần đầu tiên, hệ thống mở một DB Transaction, ghi <code>transactionId</code> vào bảng <code>processed_message</code> và tiến hành cập nhật trạng thái đơn hàng.</li>
+                    <li>Nếu do lỗi mạng, cổng thanh toán gửi lại callback IPN lần 2, hệ thống sẽ truy vấn bảng <code>processed_message</code> trước. Vì ID đã tồn tại, hệ thống lập tiếp bỏ qua xử lý nghiệp vụ và trả về kết quả thành công cho cổng thanh toán để tránh ghi nhận thanh toán trùng lặp.</li>
+                  </ul>
+                </div>
+              </details>
+
+              <!-- Q20 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 3: Nếu RabbitMQ bị sập bất ngờ khi luồng Saga đang chạy dở ở giữa bước giữ kho và áp khuyến mãi, hệ thống sẽ giải quyết thế nào để không treo dữ liệu kho?</summary>
+                <div class="qa-content">
+                  <p>Hệ thống Bookstore xử lý rủi ro mất mát/nghẽn tin nhắn bằng hai cơ chế tự phục hồi:</p>
+                  <ol>
+                    <li><strong>Idempotent Message Handling:</strong> Khi RabbitMQ hoạt động trở lại, các tin nhắn chưa được xác nhận (Acknowledge) sẽ được gửi lại (Redeliver). Các service tiêu thụ sẽ check bảng <code>processed_message</code> để bỏ qua xử lý lặp lại nếu đã xử lý xong trước đó.</li>
+                    <li><strong>Saga Timeout Recovery (Scheduler quét dọn tự động):</strong> Tại <code>saga-orchestrator-service</code>, chúng em thiết kế một <strong>Scheduler chạy ngầm định kỳ</strong> (quét mỗi phút). Nó sẽ tìm các bản ghi Saga ở bảng <code>saga_instance</code> có trạng thái đang chạy dở (<code>STARTED</code> hoặc <code>ORDER_CREATED</code>) mà đã quá 15 phút không cập nhật trạng thái. Hệ thống sẽ tự động chuyển trạng thái Saga sang <code>COMPENSATING</code> và phát lệnh bù trừ (Compensation Commands) để nhả tồn kho sách, hoàn lại mã giảm giá, trả hệ thống về trạng thái nhất quán ban đầu.</li>
+                  </ol>
+                </div>
+              </details>
+
+              <!-- Q21 -->
+              <details class="qa-card">
+                <summary class="qa-summary">Câu 4: Tại sao các bạn lại lựa chọn gọi trực tiếp Google Gemini API qua REST Client thay vì sử dụng thư viện Spring AI?</summary>
+                <div class="qa-content">
+                  <p>Chúng em chọn gọi REST trực tiếp vì các lý do thực tế sau:</p>
+                  <ol>
+                    <li><strong>Tránh lỗi Breaking Changes:</strong> Thư viện Spring AI hiện tại đang trong giai đoạn phát triển rất nhanh, cú pháp thay đổi liên tục qua từng version nhỏ, gây ra rủi ro mất tương thích ngược (breaking changes) rất cao cho mã nguồn hệ thống.</li>
+                    <li><strong>Kiểm soát chi tiết cấu trúc gửi đi (Payload Control):</strong> Tự viết REST client giúp chúng em kiểm soát 100% cấu trúc JSON, dễ dàng tùy biến cấu hình an toàn, nhiệt độ sinh từ và đặc biệt là tích hợp tính năng **Tool/Function Calling** của Gemini mượt mà hơn nhiều so với việc bị giới hạn bởi lớp bọc (wrapper layer) của Spring AI.</li>
+                  </ol>
+                </div>
+              </details>
             </div>
           </section>
 
