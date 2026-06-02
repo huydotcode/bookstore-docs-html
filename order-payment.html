@@ -229,24 +229,30 @@
               <pre class="mermaid">
                 sequenceDiagram
                   autonumber
-                  actor User as Khach hang
+                  actor User as Khách hàng
                   participant FE as Next.js Frontend
                   participant GW as "API Gateway (Port 8080)"
+                  participant Orchestrator as Saga Orchestrator
                   participant PayService as Payment Service
-                  participant Gateway as "Cong VNPay/MoMo/ZaloPay"
+                  participant Gateway as "Cổng VNPay/MoMo/ZaloPay"
+                  participant MQ as RabbitMQ Broker
 
-                  FE->>GW: 1. Poll trang thai Saga GET /api/v1/checkout/:sagaId
-                  GW-->>FE: 2. Tra ve trang thai Saga kem paymentUrl
-                  FE->>User: 3. Chuyen huong trinh duyet den cong thanh toan
-                  User->>Gateway: 4. Nhap thong tin va thuc hien thanh toan
-                  Gateway->>User: 5. Redirect trinh duyet ve callback cua Payment Service
+                  FE->>GW: 1. Poll trạng thái Saga GET /api/v1/checkout/:sagaId
+                  GW->>Orchestrator: 2. Chuyển tiếp request
+                  Orchestrator-->>GW: 3. Trả về trạng thái Saga (kèm paymentUrl)
+                  GW-->>FE: 4. Trả về kết quả cho Frontend
+                  FE->>User: 5. Chuyển hướng trình duyệt sang cổng thanh toán
+                  User->>Gateway: 6. Nhập thông tin và thực hiện thanh toán
+                  Gateway->>User: 7. Redirect trình duyệt về callback của Payment Service
                   Note right of User: Redirect: GET /api/v1/payment/vnpay/callback
-                  User->>PayService: 6. Gui request redirect kem chu ky dien tu
-                  PayService->>PayService: 7. Xac thuc signature va cap nhat Payment
-                  PayService-->>GW: 8. Publish EVENT: payment.completed
-                  PayService->>User: 9. Redirect trinh duyet ve FE Return Page
-                  Note right of User: Redirect: /payment/vnpay/return?resultCode=00...
-                  User->>FE: 10. FE hien thi thanh cong va chuyen huong ve don hang
+                  User->>GW: 8. Gửi request redirect (qua Gateway)
+                  GW->>PayService: 9. Chuyển tiếp đến Payment Service
+                  PayService->>PayService: 10. Xác thực signature & cập nhật Payment
+                  PayService-->>MQ: 11. Publish EVENT: payment.completed
+                  MQ-->>Orchestrator: 12. Nhận EVENT & tiếp tục bước tiếp theo
+                  PayService-->>GW: 13. Trả về mã Redirect về FE Return Page
+                  GW-->>User: 14. Chuyển tiếp trình duyệt về Frontend
+                  User->>FE: 15. FE hiển thị thành công và chuyển hướng về đơn hàng
               </pre>
               <div class="diagram-caption">Hình 3.1: Luồng chuyển hướng thanh toán và xử lý kết quả Callback</div>
             </div>
@@ -327,7 +333,7 @@
               <p class="kicker">3. MoMo (Ví điện tử MoMo)</p>
               <div class="grid-2">
                 <div>
-                  <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem;">Tích hợpcapture ví (Capture Wallet)</h4>
+                  <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem;">Tích hợp cổng ví (Capture Wallet)</h4>
                   <p style="font-size: 0.92rem; line-height: 1.6; margin-bottom: var(--space-3);">
                     Tương tác qua giao thức RESTful API. Hệ thống thực hiện gửi yêu cầu POST JSON trực tiếp lên máy chủ MoMo chứa các thông tin <code>partnerCode</code>, <code>requestId</code>, <code>amount</code>, <code>orderId</code>, <code>orderInfo</code>, <code>redirectUrl</code>, <code>ipnUrl</code> và nhận về phản hồi chứa liên kết thanh toán <code>payUrl</code>.
                   </p>
@@ -417,36 +423,36 @@
 
                     Client->>Orchestrator: POST /api/v1/checkout
                     Orchestrator->>Order: COMMAND: order.create.command
-                    Order->>Order: Tao Order voi trang thai PENDING
+                    Order->>Order: Tạo Order với trạng thái PENDING
                     Order-->>Orchestrator: EVENT: order.created
                     Orchestrator->>Book: COMMAND: book.stock.reserve.command
-                    Book->>Book: Giu so luong sach trong kho
+                    Book->>Book: Giữ số lượng sách trong kho
                     Book-->>Orchestrator: EVENT: book.stock.reserved
                     Orchestrator->>Promo: COMMAND: promotion.reserve.command
-                    Promo->>Promo: Giu luot su dung ma voucher
+                    Promo->>Promo: Giữ lượt sử dụng mã voucher
                     Promo-->>Orchestrator: EVENT: promotion.reserved
                     Orchestrator->>Ship: COMMAND: shipping.create.command
-                    Ship->>Ship: Tao van don giao hang
+                    Ship->>Ship: Tạo vận đơn giao hàng
                     Ship-->>Orchestrator: EVENT: shipping.created
                     Orchestrator->>Payment: COMMAND: payment.create.command
-                    Payment->>Payment: Khoi tao URL thanh toan
+                    Payment->>Payment: Khởi tạo URL thanh toán
                     Payment-->>Orchestrator: EVENT: payment.created
-                    Orchestrator->>Client: Tra ve paymentUrl
-                    Client->>Payment: Nguoi dung thanh toan thanh cong
+                    Orchestrator->>Client: Trả về paymentUrl
+                    Client->>Payment: Người dùng thanh toán thành công
                     Payment-->>Orchestrator: EVENT: payment.completed
                     Orchestrator->>Order: COMMAND: order.confirm.command
-                    Order->>Order: Xac nhan Order voi trang thai CONFIRMED
+                    Order->>Order: Xác nhận Order với trạng thái CONFIRMED
                     Order-->>Orchestrator: EVENT: order.confirmed
                     Orchestrator->>Book: COMMAND: book.stock.confirm.command
-                    Book->>Book: Tru kho chinh thuc
+                    Book->>Book: Trừ kho chính thức
                     Book-->>Orchestrator: EVENT: book.stock.confirmed
                     Orchestrator->>Promo: COMMAND: promotion.confirm.command
-                    Promo->>Promo: Tru luot dung voucher chinh thuc
+                    Promo->>Promo: Trừ lượt dùng voucher chính thức
                     Promo-->>Orchestrator: EVENT: promotion.confirmed
                     Orchestrator->>Cart: COMMAND: cart.clear.command
-                    Cart->>Cart: Xoa san pham khoi gio hang
+                    Cart->>Cart: Xóa sản phẩm khỏi giỏ hàng
                     Cart-->>Orchestrator: EVENT: cart.cleared
-                    Orchestrator->>Client: Trang thai Saga la COMPLETED
+                    Orchestrator->>Client: Trạng thái Saga là COMPLETED
                 </pre>
                 <div class="diagram-caption">Hình 4.1: Luồng tương tác các microservices khi thanh toán thành công</div>
               </div>
@@ -466,16 +472,16 @@
 
                     Client->>Orchestrator: POST /api/v1/checkout
                     Orchestrator->>Order: COMMAND: order.create.command
-                    Order->>Order: Tao Order voi trang thai PENDING
+                    Order->>Order: Tạo Order với trạng thái PENDING
                     Order-->>Orchestrator: EVENT: order.created
                     Orchestrator->>Book: COMMAND: book.stock.reserve.command
-                    Book->>Book: Kiem tra so luong va bao Het sach
+                    Book->>Book: Kiểm tra số lượng và báo Hết sách
                     Book-->>Orchestrator: EVENT: book.stock.failed
-                    Note over Orchestrator: Bat dau tien trinh Bu tru (Rollback)
+                    Note over Orchestrator: Bắt đầu tiến trình Bù trừ (Rollback)
                     Orchestrator->>Order: COMMAND: order.cancel.command
-                    Order->>Order: Cap nhat trang thai don thanh CANCELLED
+                    Order->>Order: Cập nhật trạng thái đơn thành CANCELLED
                     Order-->>Orchestrator: EVENT: order.cancelled
-                    Orchestrator->>Client: Trang thai Saga la FAILED
+                    Orchestrator->>Client: Trạng thái Saga là FAILED
                 </pre>
                 <div class="diagram-caption">Hình 4.2: Luồng bù trừ rollback tự động khi một bước trung gian gặp sự cố</div>
               </div>
@@ -594,32 +600,161 @@
               </div>
             </div>
 
-            <!-- Endpoint 3 -->
-            <div class="card">
+            <!-- Endpoint 3: VNPay Callback -->
+            <div class="card" style="margin-bottom: var(--space-4);">
               <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3);">
                 <span class="badge get">GET</span>
                 <span class="status-label stable">Stable</span>
                 <span style="font-family: monospace; font-weight: bold; font-size: 1.05rem;">/api/v1/payment/vnpay/callback</span>
               </div>
               <p style="margin-bottom: var(--space-3);">
-                Endpoint do VNPay gọi về sau khi khách hàng thực hiện giao dịch. Hệ thống sẽ verify chữ ký, cập nhật trạng thái thanh toán và redirect khách hàng về trang hiển thị kết quả của frontend.
+                Endpoint do cổng thanh toán VNPay gọi về (Redirect) sau khi người dùng thực hiện giao dịch. Hệ thống thực hiện xác thực chữ ký (SecureHash), cập nhật trạng thái giao dịch, gửi event <code>payment.completed</code> hoặc <code>payment.failed</code> qua RabbitMQ và redirect trình duyệt của người dùng về trang kết quả Frontend.
               </p>
-              <table class="table-tech" style="margin-bottom: 0;">
-                <thead>
-                  <tr>
-                    <th>Tham số</th>
-                    <th>Kiểu dữ liệu</th>
-                    <th>Bắt buộc</th>
-                    <th>Mô tả</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr><td><code>vnp_ResponseCode</code></td><td>String</td><td>Có*</td><td>Mã kết quả giao dịch ("00" là thành công).</td></tr>
-                  <tr><td><code>vnp_TxnRef</code></td><td>String</td><td>Có*</td><td>Mã giao dịch tham chiếu (ở đây là mã <code>paymentId</code>).</td></tr>
-                  <tr><td><code>vnp_SecureHash</code></td><td>String</td><td>Có*</td><td>Chuỗi bảo mật để xác thực tính toàn vẹn dữ liệu.</td></tr>
-                  <tr><td><code>vnp_Amount</code></td><td>Long</td><td>Có*</td><td>Số tiền giao dịch nhân với 100.</td></tr>
-                </tbody>
-              </table>
+              <div class="table-responsive" style="box-shadow: none; margin-bottom: 0;">
+                <table class="table-tech">
+                  <thead>
+                    <tr>
+                      <th>Tham số (Query)</th>
+                      <th>Kiểu dữ liệu</th>
+                      <th>Bắt buộc</th>
+                      <th>Mô tả</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td><code>vnp_TxnRef</code></td><td>String</td><td>Có</td><td>Mã giao dịch tham chiếu phía đối tác (chính là <code>transactionId</code> của Payment).</td></tr>
+                    <tr><td><code>vnp_ResponseCode</code></td><td>String</td><td>Có</td><td>Mã kết quả giao dịch từ VNPay (<code>"00"</code> là giao dịch thành công).</td></tr>
+                    <tr><td><code>vnp_TransactionStatus</code></td><td>String</td><td>Có</td><td>Trạng thái giao dịch tại VNPay (<code>"00"</code> là thành công).</td></tr>
+                    <tr><td><code>vnp_Amount</code></td><td>String</td><td>Có</td><td>Số tiền giao dịch (đã được nhân với 100, e.g. 10000000 = 100,000 VND).</td></tr>
+                    <tr><td><code>vnp_BankCode</code></td><td>String</td><td>Có</td><td>Mã ngân hàng thực hiện thanh toán (e.g., <code>NCB</code>, <code>VIB</code>).</td></tr>
+                    <tr><td><code>vnp_PayDate</code></td><td>String</td><td>Có</td><td>Thời gian ghi nhận giao dịch tại VNPay (định dạng <code>yyyyMMddHHmmss</code>).</td></tr>
+                    <tr><td><code>vnp_SecureHash</code></td><td>String</td><td>Có</td><td>Chữ ký kiểm tra tính toàn vẹn dữ liệu, mã hóa bằng HMAC-SHA512.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Endpoint 4: MoMo Callback -->
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3);">
+                <span class="badge post">POST</span>
+                <span class="status-label stable">Stable</span>
+                <span style="font-family: monospace; font-weight: bold; font-size: 1.05rem;">/api/v1/payment/momo/callback</span>
+              </div>
+              <p style="margin-bottom: var(--space-3);">
+                Endpoint Server-to-Server (IPN) do MoMo gọi bất đồng bộ để thông báo kết quả giao dịch. API nhận payload dạng JSON, verify chữ ký <code>signature</code> bằng thuật toán HMAC-SHA256 với secret key, cập nhật trạng thái giao dịch trong DB và gửi event trạng thái tương ứng qua RabbitMQ Broker.
+              </p>
+              <div class="table-responsive" style="box-shadow: none; margin-bottom: 0;">
+                <table class="table-tech">
+                  <thead>
+                    <tr>
+                      <th>Thuộc tính (JSON Body)</th>
+                      <th>Kiểu dữ liệu</th>
+                      <th>Bắt buộc</th>
+                      <th>Mô tả</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td><code>partnerCode</code></td><td>String</td><td>Có</td><td>Mã định danh đối tác MoMo.</td></tr>
+                    <tr><td><code>orderId</code></td><td>String</td><td>Có</td><td>Mã giao dịch phía đối tác (tương ứng với <code>transactionId</code> lưu trong DB).</td></tr>
+                    <tr><td><code>requestId</code></td><td>String</td><td>Có</td><td>Mã yêu cầu duy nhất cho mỗi giao dịch thanh toán.</td></tr>
+                    <tr><td><code>amount</code></td><td>Long</td><td>Có</td><td>Số tiền giao dịch thực tế (e.g. 50000).</td></tr>
+                    <tr><td><code>transId</code></td><td>Long</td><td>Có</td><td>Mã giao dịch duy nhất ghi nhận trên hệ thống MoMo.</td></tr>
+                    <tr><td><code>resultCode</code></td><td>Integer</td><td>Có</td><td>Mã kết quả giao dịch (<code>0</code> là thành công, khác 0 đại diện cho các mã lỗi).</td></tr>
+                    <tr><td><code>message</code></td><td>String</td><td>Có</td><td>Thông báo kết quả giao dịch chi tiết.</td></tr>
+                    <tr><td><code>extraData</code></td><td>String</td><td>Không</td><td>Dữ liệu bổ sung dạng chuỗi (thường dùng để lưu <code>redirectUrl</code> mã hóa Base64).</td></tr>
+                    <tr><td><code>signature</code></td><td>String</td><td>Có</td><td>Chữ ký số HMAC-SHA256 của MoMo để verify tính toàn vẹn dữ liệu.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Endpoint 5: MoMo Return -->
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3);">
+                <span class="badge get">GET</span>
+                <span class="status-label stable">Stable</span>
+                <span style="font-family: monospace; font-weight: bold; font-size: 1.05rem;">/api/v1/payment/momo/return</span>
+              </div>
+              <p style="margin-bottom: var(--space-3);">
+                Endpoint xử lý redirect trình duyệt của người dùng từ cổng MoMo về hệ thống. API thực hiện cập nhật kết quả giao dịch tương tự callback, sau đó giải mã trường <code>extraData</code> (Base64) để lấy URL đích của Frontend và thực hiện redirect trình duyệt về đó kèm theo các tham số kết quả.
+              </p>
+              <div class="table-responsive" style="box-shadow: none; margin-bottom: 0;">
+                <table class="table-tech">
+                  <thead>
+                    <tr>
+                      <th>Tham số (Query)</th>
+                      <th>Kiểu dữ liệu</th>
+                      <th>Bắt buộc</th>
+                      <th>Mô tả</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>-</td><td>-</td><td>-</td><td>Các tham số nhận được qua Query Parameters tương tự cấu trúc các trường của <code>MoMoCallbackRequest</code>.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Endpoint 6: ZaloPay Callback -->
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3);">
+                <span class="badge post">POST</span>
+                <span class="status-label stable">Stable</span>
+                <span style="font-family: monospace; font-weight: bold; font-size: 1.05rem;">/api/v1/payment/zalopay/callback</span>
+              </div>
+              <p style="margin-bottom: var(--space-3);">
+                Endpoint Server-to-Server được ZaloPay gọi để cập nhật kết quả giao dịch. Nhận payload JSON chứa dữ liệu thô đã mã hóa và chữ ký xác thực. API thực hiện băm HMAC-SHA256 trường <code>data</code> bằng <code>key2</code> để so khớp với <code>mac</code> nhận được, parse JSON lấy <code>app_trans_id</code> để cập nhật DB và đẩy event thanh toán thành công sang RabbitMQ.
+              </p>
+              <div class="table-responsive" style="box-shadow: none; margin-bottom: 0;">
+                <table class="table-tech">
+                  <thead>
+                    <tr>
+                      <th>Thuộc tính (JSON Body)</th>
+                      <th>Kiểu dữ liệu</th>
+                      <th>Bắt buộc</th>
+                      <th>Mô tả</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td><code>data</code></td><td>String</td><td>Có</td><td>Chuỗi JSON chứa thông tin chi tiết giao dịch (chứa <code>app_trans_id</code>, <code>amount</code>, etc.).</td></tr>
+                    <tr><td><code>mac</code></td><td>String</td><td>Có</td><td>Chữ ký xác thực dữ liệu, tính bằng HMAC-SHA256 với <code>key2</code> của ZaloPay.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Endpoint 7: ZaloPay Return -->
+            <div class="card">
+              <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3);">
+                <span class="badge get">GET</span>
+                <span class="status-label stable">Stable</span>
+                <span style="font-family: monospace; font-weight: bold; font-size: 1.05rem;">/api/v1/payment/zalopay/return</span>
+              </div>
+              <p style="margin-bottom: var(--space-3);">
+                Endpoint nhận redirect người dùng từ cổng ZaloPay. API xác thực mã <code>checksum</code> bảo mật phía client để chống sửa đổi tham số. Nếu thanh toán thất bại (status != 1), API gọi <code>markPaymentFailed</code> để hủy thanh toán và kích hoạt rollback Saga, sau đó chuyển hướng người dùng về Frontend kèm trạng thái giao dịch.
+              </p>
+              <div class="table-responsive" style="box-shadow: none; margin-bottom: 0;">
+                <table class="table-tech">
+                  <thead>
+                    <tr>
+                      <th>Tham số (Query)</th>
+                      <th>Kiểu dữ liệu</th>
+                      <th>Bắt buộc</th>
+                      <th>Mô tả</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td><code>appid</code></td><td>String</td><td>Có</td><td>ID của ứng dụng đăng ký với ZaloPay.</td></tr>
+                    <tr><td><code>apptransid</code></td><td>String</td><td>Có</td><td>Mã giao dịch gửi sang ZaloPay khi tạo đơn (định dạng <code>apptransid</code> lưu dưới dạng <code>yyMMdd_timestamp</code>).</td></tr>
+                    <tr><td><code>pmcid</code></td><td>String</td><td>Có</td><td>Mã phương thức thanh toán ZaloPay sử dụng.</td></tr>
+                    <tr><td><code>bankcode</code></td><td>String</td><td>Có</td><td>Mã ngân hàng xử lý thanh toán.</td></tr>
+                    <tr><td><code>amount</code></td><td>String</td><td>Có</td><td>Số tiền giao dịch thực tế.</td></tr>
+                    <tr><td><code>discountamount</code></td><td>String</td><td>Có</td><td>Số tiền được chiết khấu hoặc giảm giá từ ZaloPay.</td></tr>
+                    <tr><td><code>status</code></td><td>String</td><td>Có</td><td>Trạng thái thanh toán từ ZaloPay (<code>"1"</code> là thành công, các giá trị khác thất bại).</td></tr>
+                    <tr><td><code>checksum</code></td><td>String</td><td>Có</td><td>Chữ ký số kiểm tra tính toàn vẹn phía client, băm HMAC-SHA256 với <code>key2</code>.</td></tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </section>
 
