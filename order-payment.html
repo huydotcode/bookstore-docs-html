@@ -383,6 +383,69 @@
               Chi tiết phương thức thanh toán
             </h2>
             
+            <!-- Bảng so sánh tổng quan các phương thức thanh toán -->
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <p class="kicker">So sánh tổng quan</p>
+              <h3 style="font-family: 'Lora', serif; font-size: 1.35rem; color: var(--accent-2); margin-bottom: var(--space-3);">Bảng so sánh cách thức hoạt động & luồng xử lý giữa các phương thức</h3>
+              <div class="table-responsive" style="margin-bottom: 0;">
+                <table class="table-tech" style="font-size: 0.88rem; line-height: 1.5;">
+                  <thead>
+                    <tr>
+                      <th style="width: 16%; background: rgba(15, 107, 99, 0.08); color: #0f3d36;">Tiêu chí</th>
+                      <th style="width: 21%;">COD (Tiền mặt)</th>
+                      <th style="width: 21%;">VNPay (Cổng liên kết)</th>
+                      <th style="width: 21%;">MoMo (Ví điện tử)</th>
+                      <th style="width: 21%;">ZaloPay (Ví điện tử)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>Mô tả cơ bản</strong></td>
+                      <td>Người nhận thanh toán trực tiếp cho shipper khi nhận hàng thực tế.</td>
+                      <td>Khách hàng thanh toán qua ngân hàng nội địa, quốc tế hoặc ứng dụng Mobile Banking của VNPay.</td>
+                      <td>Khách hàng thanh toán qua ứng dụng Ví điện tử MoMo bằng quét mã QR hoặc cổng thanh toán web.</td>
+                      <td>Khách hàng thanh toán qua ứng dụng ZaloPay bằng liên kết ngân hàng hoặc số dư ví.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Kênh truyền dữ liệu</strong></td>
+                      <td><span class="status-label draft">Offline</span><br/>Không gọi kết nối API trực tuyến.</td>
+                      <td><span class="status-label stable">Redirect / Web</span><br/>Gọi qua HTTP GET/POST sinh link thanh toán trực tuyến.</td>
+                      <td><span class="status-label stable">RESTful API</span><br/>Gọi POST JSON trực tiếp lên server MoMo để sinh payUrl.</td>
+                      <td><span class="status-label stable">RESTful API</span><br/>Gọi POST Form URL-encoded trực tiếp lên ZaloPay.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Luồng Saga Orchestrator</strong></td>
+                      <td>Luồng chạy đồng bộ, trực tiếp trả về <code>PAYMENT_SKIPPED</code> và tiếp tục bước sau.</td>
+                      <td>Chờ người dùng thanh toán. Saga dừng ở <code>PAYMENT_PENDING</code> và tiếp tục khi nhận Callback.</td>
+                      <td>Chờ người dùng thanh toán. Saga dừng ở <code>PAYMENT_PENDING</code> và tiếp tục khi nhận Callback.</td>
+                      <td>Chờ người dùng thanh toán. Saga dừng ở <code>PAYMENT_PENDING</code> và tiếp tục khi nhận Callback.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Xác thực an toàn (Signature)</strong></td>
+                      <td>Không sử dụng chữ ký số. Đối soát offline qua vận đơn.</td>
+                      <td><code>HMAC-SHA512</code> băm chuỗi tham số sắp xếp theo thứ tự bảng chữ cái alphabet.</td>
+                      <td><code>HMAC-SHA256</code> băm chuỗi raw data ghép bằng ký tự <code>&</code> theo khóa bí mật.</td>
+                      <td>MAC 3 chiều: MAC tạo đơn (Key 1), MAC Callback (Key 2), Checksum Redirect (Key 2).</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Callback & Redirect</strong></td>
+                      <td>Không có luồng Callback. Cập nhật qua Webhook của Shipping Service.</td>
+                      <td>VNPay Redirect người dùng qua GET callback &rarr; Verify chữ ký &rarr; Redirect về Frontend.</td>
+                      <td>MoMo gọi IPN (Server-to-Server) bất đồng bộ + Client Redirect người dùng về Frontend.</td>
+                      <td>ZaloPay gọi Callback (Server-to-Server) bất đồng bộ + Client Redirect kèm <code>checksum</code>.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Hoàn tiền khi Saga lỗi (Refund)</strong></td>
+                      <td>Không cần hoàn tiền kỹ thuật. Chỉ cần giải phóng kho và voucher.</td>
+                      <td>Gọi API Hoàn tiền của VNPay gửi yêu cầu hoàn trả giao dịch qua ngân hàng liên kết.</td>
+                      <td>Gọi POST API Hoàn tiền (MoMo Refund API) thông qua mã giao dịch MoMo gốc.</td>
+                      <td>Gọi POST API Hoàn tiền (ZaloPay Refund API) kèm mã apptransid và chữ ký MAC.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
             <!-- COD Details -->
             <div class="card" style="margin-bottom: var(--space-4);">
               <p class="kicker">1. COD (Thanh toán khi nhận hàng)</p>
@@ -398,6 +461,40 @@
                   <div class="callout info" style="margin-bottom: 0; font-size: 0.88rem;">
                     <strong>Không có chữ ký số:</strong> Việc xác thực giao dịch diễn ra hoàn toàn ngoài đời thực (Offline). Sau khi đơn hàng chuyển sang trạng thái <code>DELIVERED</code> thành công, bên đối tác vận chuyển thực hiện thu hộ tiền mặt và đối soát định kỳ. Khi nhận tiền đối soát, hệ thống cập nhật thủ công hoặc tự động qua webhook của Shipping Service để đổi đơn hàng sang trạng thái cuối cùng là <code>COMPLETED</code>.
                   </div>
+                </div>
+              </div>
+              
+              <!-- Sơ đồ luồng COD -->
+              <div style="margin-top: var(--space-4); border-top: 1px dashed var(--line); padding-top: var(--space-3);">
+                <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem; color: var(--accent-2);">Sơ đồ luồng đặt hàng thanh toán COD</h4>
+                <div class="diagram-wrapper" style="margin-bottom: 0; padding: var(--space-3); background: #ffffff; border-radius: var(--radius-sm);">
+                  <pre class="mermaid">
+                    sequenceDiagram
+                      autonumber
+                      actor User as Khách hàng
+                      participant FE as Next.js Frontend
+                      participant Saga as Saga Orchestrator
+                      participant Order as Order Service
+                      participant Payment as Payment Service
+                      participant Ship as Shipping Service
+
+                      User->>FE: Chọn COD & Nhấn "Đặt hàng"
+                      FE->>Saga: POST /api/v1/checkout (COD payload)
+                      Saga->>Order: Lệnh: order.create.command
+                      Order-->>Saga: Sự kiện: order.created (PENDING)
+                      Note over Saga: Thực hiện giữ kho & giữ khuyến mãi...
+                      Saga->>Ship: Lệnh: shipping.create.command
+                      Ship-->>Saga: Sự kiện: shipping.created
+                      Saga->>Payment: Lệnh: payment.create.command (COD)
+                      Note over Payment: Lưu DB: status = PAYMENT_SKIPPED
+                      Payment-->>Saga: Sự kiện: payment.completed (Lập tức)
+                      Saga->>Order: Lệnh: order.confirm.command
+                      Order-->>Saga: Sự kiện: order.confirmed (CONFIRMED)
+                      Note over Saga: Xác nhận trừ kho, voucher & xóa giỏ hàng...
+                      FE->>Saga: Poll/Truy vấn GET /api/v1/checkout/{sagaId}
+                      Saga-->>FE: Trạng thái Saga: COMPLETED
+                      FE->>User: Hiển thị đặt hàng thành công & chuyển hướng
+                  </pre>
                 </div>
               </div>
             </div>
@@ -428,6 +525,75 @@
                   </p>
                 </div>
               </div>
+              
+              <!-- VNPay Status Codes -->
+              <div style="margin-top: var(--space-3); border-top: 1px dashed var(--line); padding-top: var(--space-3);">
+                <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem; color: var(--accent-2);">Bảng mã lỗi phản hồi VNPay (vnp_ResponseCode)</h4>
+                <div class="table-responsive" style="margin-bottom: 0; box-shadow: none; border-radius: var(--radius-sm);">
+                  <table class="table-tech" style="font-size: 0.85rem;">
+                    <thead>
+                      <tr>
+                        <th style="width: 15%;">Mã lỗi</th>
+                        <th style="width: 35%;">Thông báo (Hệ thống)</th>
+                        <th style="width: 50%;">Ý nghĩa chi tiết & Hướng xử lý</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>00</code></td><td><strong>Transaction successful</strong></td><td>Giao dịch thành công. Đơn hàng hợp lệ.</td></tr>
+                      <tr><td><code>07</code></td><td><strong>Transaction suspected of fraud</strong></td><td>Giao dịch bị nghi ngờ gian lận (trừ tiền thành công nhưng cần hậu kiểm).</td></tr>
+                      <tr><td><code>09</code></td><td><strong>Card not registered for internet banking</strong></td><td>Thẻ/Tài khoản khách hàng chưa đăng ký dịch vụ InternetBanking tại ngân hàng.</td></tr>
+                      <tr><td><code>10</code></td><td><strong>Card authentication failed more than 3 times</strong></td><td>Khách hàng xác thực thông tin thẻ/tài khoản sai quá 3 lần. Hoàn tác đơn.</td></tr>
+                      <tr><td><code>11</code></td><td><strong>Payment timeout. Please try again</strong></td><td>Đã hết hạn chờ thanh toán. Hủy đơn hàng để giải phóng kho.</td></tr>
+                      <tr><td><code>12</code></td><td><strong>Card is locked</strong></td><td>Thẻ/Tài khoản của khách hàng đang bị khóa. Khách hàng cần mở khóa thẻ.</td></tr>
+                      <tr><td><code>13</code></td><td><strong>Invalid OTP</strong></td><td>Khách hàng nhập sai mật khẩu OTP xác thực giao dịch. Khách hàng thử lại.</td></tr>
+                      <tr><td><code>24</code></td><td><strong>Transaction canceled</strong></td><td>Khách hàng chủ động hủy giao dịch thanh toán trên cổng VNPay.</td></tr>
+                      <tr><td><code>51</code></td><td><strong>Insufficient account balance</strong></td><td>Số dư tài khoản khách hàng không đủ để thực hiện thanh toán.</td></tr>
+                      <tr><td><code>65</code></td><td><strong>Account exceeded daily transaction limit</strong></td><td>Tài khoản của khách hàng đã vượt quá hạn mức giao dịch trong ngày.</td></tr>
+                      <tr><td><code>75</code></td><td><strong>Bank is under maintenance</strong></td><td>Ngân hàng thanh toán đang bảo trì. Vui lòng chọn ngân hàng khác hoặc đợi.</td></tr>
+                      <tr><td><code>79</code></td><td><strong>Incorrect payment password more than allowed</strong></td><td>Nhập sai mật khẩu thanh toán quá số lần quy định. Thử lại sau.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              <!-- Sơ đồ luồng VNPay -->
+              <div style="margin-top: var(--space-4); border-top: 1px dashed var(--line); padding-top: var(--space-3);">
+                <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem; color: var(--accent-2);">Sơ đồ luồng đặt hàng thanh toán VNPay</h4>
+                <div class="diagram-wrapper" style="margin-bottom: 0; padding: var(--space-3); background: #ffffff; border-radius: var(--radius-sm);">
+                  <pre class="mermaid">
+                    sequenceDiagram
+                      autonumber
+                      actor User as Khách hàng
+                      participant FE as Next.js Frontend
+                      participant Saga as Saga Orchestrator
+                      participant PayService as Payment Service
+                      participant VNPay as Cổng VNPay
+                      participant Order as Order Service
+
+                      User->>FE: Chọn VNPay & Nhấn "Đặt hàng"
+                      FE->>Saga: POST /api/v1/checkout (VNPay payload)
+                      Saga->>Order: Lệnh: order.create.command
+                      Order-->>Saga: Sự kiện: order.created (PENDING)
+                      Note over Saga: Thực hiện giữ kho, giữ khuyến mãi, tạo vận đơn...
+                      Saga->>PayService: Lệnh: payment.create.command
+                      PayService->>PayService: Sinh link vnp_Url kèm chữ ký bảo mật HMAC-SHA512
+                      PayService-->>Saga: Sự kiện: payment.created (chứa paymentUrl)
+                      Note over Saga: Trạng thái Saga đổi thành PAYMENT_PENDING
+                      FE->>Saga: Poll/Truy vấn GET /api/v1/checkout/{sagaId}
+                      Saga-->>FE: Trả về trạng thái & paymentUrl của VNPay
+                      FE->>User: Chuyển hướng trình duyệt sang cổng VNPay
+                      User->>VNPay: Nhập thông tin & Xác thực thanh toán OTP
+                      VNPay->>PayService: Trình duyệt redirect: GET /api/v1/payment/vnpay/callback
+                      PayService->>PayService: Xác thực signature VNPay & Đổi trạng thái -> COMPLETED
+                      PayService-->>Saga: Publish sự kiện: payment.completed qua RabbitMQ
+                      Saga->>Order: Lệnh: order.confirm.command
+                      Order-->>Saga: Sự kiện: order.confirmed (CONFIRMED)
+                      Note over Saga: Xác nhận trừ kho, voucher & xóa giỏ hàng...
+                      PayService-->>FE: Redirect trình duyệt về FE Return Page (kèm kết quả)
+                      FE->>User: Hiển thị Đơn hàng đặt thành công & Mã vận đơn
+                  </pre>
+                </div>
+              </div>
             </div>
 
             <!-- MoMo Details -->
@@ -453,6 +619,82 @@
                   </p>
                 </div>
               </div>
+              
+              <!-- MoMo Status Codes -->
+              <div style="margin-top: var(--space-3); border-top: 1px dashed var(--line); padding-top: var(--space-3);">
+                <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem; color: var(--accent-2);">Bảng mã lỗi phản hồi MoMo (resultCode)</h4>
+                <div class="table-responsive" style="margin-bottom: 0; box-shadow: none; border-radius: var(--radius-sm);">
+                  <table class="table-tech" style="font-size: 0.85rem;">
+                    <thead>
+                      <tr>
+                        <th style="width: 15%;">Mã lỗi</th>
+                        <th style="width: 35%;">Thông báo (Hệ thống)</th>
+                        <th style="width: 50%;">Ý nghĩa chi tiết & Hướng xử lý</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>0</code></td><td><strong>Successful</strong></td><td>Giao dịch hoàn tất thành công. Đơn hàng hợp lệ.</td></tr>
+                      <tr><td><code>10</code></td><td><strong>System maintenance</strong></td><td>Hệ thống MoMo đang bảo trì. Giao dịch bị tạm hoãn.</td></tr>
+                      <tr><td><code>11</code></td><td><strong>Access denied</strong></td><td>Truy cập bị từ chối. Lỗi cấu hình thông tin kết nối cổng thanh toán.</td></tr>
+                      <tr><td><code>12</code></td><td><strong>API version mismatch</strong></td><td>Phiên bản API của Merchant và MoMo không tương thích.</td></tr>
+                      <tr><td><code>13</code></td><td><strong>Authorized failed</strong></td><td>Xác thực thông tin merchant thất bại (sai Secret Key/Access Key hoặc chữ ký).</td></tr>
+                      <tr><td><code>20</code></td><td><strong>Bad request format</strong></td><td>Dữ liệu gửi lên sai định dạng hoặc thiếu các trường bắt buộc.</td></tr>
+                      <tr><td><code>21</code> / <code>22</code></td><td><strong>Invalid amount / limit</strong></td><td>Số tiền giao dịch không nằm trong hạn mức cho phép thanh toán.</td></tr>
+                      <tr><td><code>40</code></td><td><strong>Duplicated requestId</strong></td><td>Mã yêu cầu (requestId) gửi lên bị trùng lặp với giao dịch trước đó.</td></tr>
+                      <tr><td><code>41</code></td><td><strong>Duplicated orderId</strong></td><td>Mã đơn hàng (orderId) gửi lên đã tồn tại trong hệ thống MoMo.</td></tr>
+                      <tr><td><code>1001</code></td><td><strong>Insufficient funds</strong></td><td>Tài khoản người dùng không đủ số dư để thực hiện giao dịch thanh toán.</td></tr>
+                      <tr><td><code>1002</code></td><td><strong>Issuer rejected transaction</strong></td><td>Giao dịch bị từ chối bởi nhà phát hành thẻ hoặc ngân hàng liên kết.</td></tr>
+                      <tr><td><code>1003</code></td><td><strong>User cancelled</strong></td><td>Khách hàng chủ động hủy bỏ giao dịch hoặc thoát khỏi màn hình thanh toán.</td></tr>
+                      <tr><td><code>2001</code></td><td><strong>Invalid transaction / Token</strong></td><td>Giao dịch không tồn tại trên hệ thống hoặc Token đã hết hiệu lực.</td></tr>
+                      <tr><td><code>9000</code></td><td><strong>Authorized</strong></td><td>Giao dịch đã được cấp quyền thành công (chờ xác nhận/capture từ hệ thống).</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              <!-- Sơ đồ luồng MoMo -->
+              <div style="margin-top: var(--space-4); border-top: 1px dashed var(--line); padding-top: var(--space-3);">
+                <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem; color: var(--accent-2);">Sơ đồ luồng đặt hàng thanh toán MoMo</h4>
+                <div class="diagram-wrapper" style="margin-bottom: 0; padding: var(--space-3); background: #ffffff; border-radius: var(--radius-sm);">
+                  <pre class="mermaid">
+                    sequenceDiagram
+                      autonumber
+                      actor User as Khách hàng
+                      participant FE as Next.js Frontend
+                      participant Saga as Saga Orchestrator
+                      participant PayService as Payment Service
+                      participant MoMo as Cổng MoMo
+                      participant Order as Order Service
+
+                      User->>FE: Chọn MoMo & Nhấn "Đặt hàng"
+                      FE->>Saga: POST /api/v1/checkout (MoMo payload)
+                      Saga->>Order: Lệnh: order.create.command
+                      Order-->>Saga: Sự kiện: order.created (PENDING)
+                      Note over Saga: Thực hiện giữ kho, giữ khuyến mãi, tạo vận đơn...
+                      Saga->>PayService: Lệnh: payment.create.command
+                      PayService->>MoMo: POST /v2/gateway/api/create (gửi thông tin kèm chữ ký)
+                      MoMo-->>PayService: Phản hồi thông tin giao dịch chứa payUrl
+                      PayService-->>Saga: Sự kiện: payment.created (chứa paymentUrl)
+                      Note over Saga: Trạng thái Saga đổi thành PAYMENT_PENDING
+                      FE->>Saga: Poll/Truy vấn GET /api/v1/checkout/{sagaId}
+                      Saga-->>FE: Trả về trạng thái & payUrl của MoMo
+                      FE->>User: Chuyển hướng trình duyệt sang cổng thanh toán MoMo
+                      User->>MoMo: Xác thực ví MoMo / Nhập mã OTP / Quét mã QR thanh toán
+                      par Kênh IPN (Server-to-Server)
+                        MoMo->>PayService: Webhook IPN: POST /api/v1/payment/momo/callback
+                        PayService->>PayService: Xác thực Signature MoMo & Đổi trạng thái -> COMPLETED
+                        PayService-->>Saga: Publish sự kiện: payment.completed qua RabbitMQ
+                      and Kênh Client Redirect (Trình duyệt)
+                        MoMo->>PayService: Redirect trình duyệt: GET /api/v1/payment/momo/return
+                        PayService-->>FE: Redirect trình duyệt về FE Return Page (kèm trạng thái)
+                      end
+                      Saga->>Order: Lệnh: order.confirm.command
+                      Order-->>Saga: Sự kiện: order.confirmed (CONFIRMED)
+                      Note over Saga: Xác nhận trừ kho, voucher & xóa giỏ hàng...
+                      FE->>User: Hiển thị Đơn hàng đặt thành công & Thông báo đơn hàng
+                  </pre>
+                </div>
+              </div>
             </div>
 
             <!-- ZaloPay Details -->
@@ -472,6 +714,116 @@
                     <li><strong>Nhận Callback (Key 2):</strong> Băm lại chuỗi JSON <code>data</code> nhận được để so sánh đối chiếu chữ ký <code>mac</code> trong request body.</li>
                     <li><strong>Nhận Redirect (Key 2):</strong> <code>checksum = HMAC-SHA256(key2, appid|apptransid|pmcid|bankcode|amount|discountamount|status)</code> để chống sửa đổi phía client.</li>
                   </ul>
+                </div>
+              </div>
+              
+              <!-- ZaloPay Status Codes -->
+              <div style="margin-top: var(--space-3); border-top: 1px dashed var(--line); padding-top: var(--space-3);">
+                <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem; color: var(--accent-2);">Bảng mã lỗi phản hồi ZaloPay (return_code & sub_return_code)</h4>
+                
+                <h5 style="font-family: 'Lora', serif; margin-bottom: var(--space-1); font-size: 0.92rem; color: var(--accent-1); margin-top: var(--space-2);">1. Mã phản hồi chung (return_code)</h5>
+                <div class="table-responsive" style="margin-bottom: var(--space-3); box-shadow: none; border-radius: var(--radius-sm);">
+                  <table class="table-tech" style="font-size: 0.85rem;">
+                    <thead>
+                      <tr>
+                        <th style="width: 20%;">Mã phản hồi</th>
+                        <th style="width: 30%;">Trạng thái (Constant)</th>
+                        <th style="width: 50%;">Ý nghĩa kết quả</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>1</code></td><td><strong>SUCCESS</strong></td><td>Giao dịch hoặc tác vụ được thực hiện thành công.</td></tr>
+                      <tr><td><code>2</code></td><td><strong>FAIL</strong></td><td>Giao dịch hoặc tác vụ thất bại (cần đối chiếu sub_return_code).</td></tr>
+                      <tr><td><code>3</code></td><td><strong>PROCESSING</strong></td><td>Giao dịch đang được xử lý bởi hệ thống ZaloPay.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h5 style="font-family: 'Lora', serif; margin-bottom: var(--space-1); font-size: 0.92rem; color: var(--accent-1);">2. Mã phản hồi chi tiết (sub_return_code)</h5>
+                <div class="table-responsive" style="margin-bottom: var(--space-3); box-shadow: none; border-radius: var(--radius-sm);">
+                  <table class="table-tech" style="font-size: 0.85rem;">
+                    <thead>
+                      <tr>
+                        <th style="width: 20%;">Mã lỗi phụ</th>
+                        <th style="width: 35%;">Mã lỗi (Constant)</th>
+                        <th style="width: 45%;">Ý nghĩa chi tiết & Hướng xử lý</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>-54</code></td><td><strong>TIME_INVALID</strong></td><td>Đơn hàng đã hết hạn thanh toán (Quá hạn cấu hình). Hủy đơn.</td></tr>
+                      <tr><td><code>-63</code></td><td><strong>ZPW_BALANCE_NOT_ENOUGH</strong></td><td>Số dư ví ZaloPay của người dùng không đủ để thực hiện thanh toán.</td></tr>
+                      <tr><td><code>-68</code></td><td><strong>DUPLICATE_APPS_TRANS_ID</strong></td><td>Mã giao dịch app_trans_id bị trùng lặp. Đổi mã apptransid mới.</td></tr>
+                      <tr><td><code>-101</code></td><td><strong>ORDER_NOT_EXIST</strong></td><td>Không tìm thấy thông tin app_trans_id trên hệ thống ZaloPay.</td></tr>
+                      <tr><td><code>-401</code></td><td><strong>ILLEGAL_DATA_REQUEST</strong></td><td>Các tham số gửi lên không đúng định dạng hoặc thiếu thông tin.</td></tr>
+                      <tr><td><code>-402</code></td><td><strong>ILLEGAL_APP/SIGNATURE_REQUEST</strong></td><td>Sai thông tin ứng dụng hoặc chữ ký bảo mật MAC không hợp lệ.</td></tr>
+                      <tr><td><code>-429</code></td><td><strong>LIMIT_REQUEST_REACH</strong></td><td>Tần suất gửi request vượt quá giới hạn cho phép của ZaloPay.</td></tr>
+                      <tr><td><code>-500</code></td><td><strong>SYSTEM_ERROR</strong></td><td>Lỗi hệ thống nội bộ từ phía cổng ZaloPay.</td></tr>
+                      <tr><td><code>-999</code></td><td><strong>SYSTEM_MAINTENANCE</strong></td><td>Hệ thống ZaloPay đang bảo trì định kỳ.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h5 style="font-family: 'Lora', serif; margin-bottom: var(--space-1); font-size: 0.92rem; color: var(--accent-1); margin-top: var(--space-2);">3. Trạng thái Client Redirect (status)</h5>
+                <div class="table-responsive" style="margin-bottom: 0; box-shadow: none; border-radius: var(--radius-sm);">
+                  <table class="table-tech" style="font-size: 0.85rem;">
+                    <thead>
+                      <tr>
+                        <th style="width: 20%;">Status</th>
+                        <th style="width: 30%;">Trạng thái Redirect</th>
+                        <th style="width: 50%;">Ý nghĩa kết quả phía Frontend</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>1</code></td><td><strong>Thành công</strong></td><td>Thanh toán hoàn tất. Hệ thống xác nhận và hiển thị thành công.</td></tr>
+                      <tr><td><code>2</code></td><td><strong>Thất bại</strong></td><td>Giao dịch bị lỗi hoặc bị hủy. Hệ thống kích hoạt Saga rollback.</td></tr>
+                      <tr><td>Khác</td><td><strong>Lỗi kết nối / Hủy bỏ</strong></td><td>Giao dịch không xác định, mặc định xử lý như thất bại.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              <!-- Sơ đồ luồng ZaloPay -->
+              <div style="margin-top: var(--space-4); border-top: 1px dashed var(--line); padding-top: var(--space-3);">
+                <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem; color: var(--accent-2);">Sơ đồ luồng đặt hàng thanh toán ZaloPay</h4>
+                <div class="diagram-wrapper" style="margin-bottom: 0; padding: var(--space-3); background: #ffffff; border-radius: var(--radius-sm);">
+                  <pre class="mermaid">
+                    sequenceDiagram
+                      autonumber
+                      actor User as Khách hàng
+                      participant FE as Next.js Frontend
+                      participant Saga as Saga Orchestrator
+                      participant PayService as Payment Service
+                      participant ZaloPay as Cổng ZaloPay
+                      participant Order as Order Service
+
+                      User->>FE: Chọn ZaloPay & Nhấn "Đặt hàng"
+                      FE->>Saga: POST /api/v1/checkout (ZaloPay payload)
+                      Saga->>Order: Lệnh: order.create.command
+                      Order-->>Saga: Sự kiện: order.created (PENDING)
+                      Note over Saga: Thực hiện giữ kho, giữ khuyến mãi, tạo vận đơn...
+                      Saga->>PayService: Lệnh: payment.create.command
+                      PayService->>ZaloPay: POST tạo đơn hàng với apptransid định dạng yyMMdd_timestamp
+                      ZaloPay-->>PayService: Trả về order_url và mã return_code = 1
+                      PayService-->>Saga: Sự kiện: payment.created (chứa orderUrl)
+                      Note over Saga: Trạng thái Saga đổi thành PAYMENT_PENDING
+                      FE->>Saga: Poll/Truy vấn GET /api/v1/checkout/{sagaId}
+                      Saga-->>FE: Trả về trạng thái & orderUrl của ZaloPay
+                      FE->>User: Chuyển hướng trình duyệt sang cổng thanh toán ZaloPay
+                      User->>ZaloPay: Nhập OTP / Xác thực sinh trắc học trên ứng dụng ZaloPay
+                      par Kênh Callback (Server-to-Server)
+                        ZaloPay->>PayService: Webhook Callback: POST /api/v1/payment/zalopay/callback
+                        PayService->>PayService: Xác thực MAC (Key 2) & Đổi trạng thái -> COMPLETED
+                        PayService-->>Saga: Publish sự kiện: payment.completed qua RabbitMQ
+                      and Kênh Client Redirect (Trình duyệt)
+                        ZaloPay->>PayService: Redirect trình duyệt: GET /api/v1/payment/zalopay/return
+                        PayService->>PayService: Xác thực chữ ký checksum (Key 2) để chống giả mạo
+                        PayService-->>FE: Redirect trình duyệt về FE Return Page (kèm kết quả)
+                      end
+                      Saga->>Order: Lệnh: order.confirm.command
+                      Order-->>Saga: Sự kiện: order.confirmed (CONFIRMED)
+                      Note over Saga: Xác nhận trừ kho, voucher & xóa giỏ hàng...
+                      FE->>User: Hiển thị Đơn hàng đặt thành công & Mã đơn hàng
+                  </pre>
                 </div>
               </div>
             </div>
@@ -1025,6 +1377,187 @@
               <p>
                 Để đảm bảo mã nguồn dễ bảo trì, mở rộng và có khả năng chịu lỗi cao, các mẫu thiết kế (Design Patterns) tiêu chuẩn đã được áp dụng chặt chẽ trong cấu trúc nghiệp vụ nội bộ của cả hai dịch vụ <code>order-service</code> và <code>payment-service</code>.
               </p>
+            </div>
+
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <p class="kicker">Sơ đồ Design Pattern Payment Service</p>
+              <p style="margin-bottom: var(--space-3);">
+                Hai sơ đồ dưới đây tách riêng hai mẫu thiết kế chính trong <code>payment-service</code>: Strategy-like Provider Family để cô lập thuật toán tích hợp từng cổng thanh toán, và Simple Factory/Dispatcher để chọn đúng provider theo <code>paymentMethod</code> từ Saga Command.
+              </p>
+
+              <div class="diagram-wrapper" style="margin-bottom: var(--space-4);">
+                <pre class="mermaid">
+                  classDiagram
+                    direction LR
+
+                    class VNPayService {
+                      &lt;&lt;interface&gt;&gt;
+                      +createVNPayPaymentUrl(PaymentRequest)
+                      +handleVNPayReturn(VNPayCallbackRequest)
+                    }
+
+                    class MoMoService {
+                      &lt;&lt;interface&gt;&gt;
+                      +createMoMoPayment(PaymentRequest)
+                      +handleMoMoCallback(MoMoCallbackRequest)
+                    }
+
+                    class ZaloPayService {
+                      &lt;&lt;interface&gt;&gt;
+                      +createOrderTransaction(PaymentRequest)
+                      +handleCallback(ZaloPayCallbackRequest)
+                    }
+
+                    class VNPayServiceImpl {
+                      &lt;&lt;ProviderStrategy&gt;&gt;
+                    }
+
+                    class MoMoServiceImpl {
+                      &lt;&lt;ProviderStrategy&gt;&gt;
+                    }
+
+                    class ZaloPayServiceImpl {
+                      &lt;&lt;ProviderStrategy&gt;&gt;
+                    }
+
+                    class PaymentCommandConsumer {
+                      &lt;&lt;Context&gt;&gt;
+                      -createProviderPayment(CreatePaymentCommand, PaymentRequest)
+                    }
+
+                    class PaymentController {
+                      &lt;&lt;Context&gt;&gt;
+                      +handleVNPayReturn(VNPayCallbackRequest, HttpServletResponse)
+                      +callbackZaloPay(ZaloPayCallbackRequest)
+                      +handleMoMoCallback(MoMoCallbackRequest)
+                    }
+
+                    class PaymentRepository {
+                      &lt;&lt;Repository&gt;&gt;
+                      +findByTransactionId(String)
+                      +findByOrderId(UUID)
+                      +findBySagaId(UUID)
+                    }
+
+                    class PaymentMessageProducer {
+                      &lt;&lt;EventPublisher&gt;&gt;
+                      +publishPaymentCreated(Payment, String, UUID)
+                      +publishPaymentResult(Payment, UUID)
+                    }
+
+                    class Payment {
+                      &lt;&lt;Entity&gt;&gt;
+                      +paymentID UUID
+                      +sagaId UUID
+                      +orderId UUID
+                      +transactionId String
+                      +paymentUrl String
+                      +status PaymentStatus
+                    }
+
+                    VNPayService &lt;|.. VNPayServiceImpl
+                    MoMoService &lt;|.. MoMoServiceImpl
+                    ZaloPayService &lt;|.. ZaloPayServiceImpl
+
+                    PaymentCommandConsumer --> VNPayService : VNPAY create
+                    PaymentCommandConsumer --> MoMoService : MOMO create
+                    PaymentCommandConsumer --> ZaloPayService : ZALOPAY create
+                    PaymentController --> VNPayService : VNPAY callback
+                    PaymentController --> MoMoService : MOMO callback
+                    PaymentController --> ZaloPayService : ZALOPAY callback
+
+                    VNPayServiceImpl --> PaymentRepository : read / save Payment
+                    MoMoServiceImpl --> PaymentRepository : read / save Payment
+                    ZaloPayServiceImpl --> PaymentRepository : read / save Payment
+                    VNPayServiceImpl --> PaymentMessageProducer : completed / failed
+                    MoMoServiceImpl --> PaymentMessageProducer : completed / failed
+                    ZaloPayServiceImpl --> PaymentMessageProducer : completed / failed
+
+                    PaymentRepository --> Payment
+                </pre>
+                <div class="diagram-caption">Hình 7.1: Strategy Pattern - nhóm provider thanh toán trong Payment Service</div>
+              </div>
+
+              <div class="callout success" style="margin-bottom: var(--space-4);">
+                <strong>Nội dung báo cáo Strategy Pattern:</strong>
+                <p style="margin-top: var(--space-2); margin-bottom: var(--space-2);">
+                  Trong <code>payment-service</code>, nhóm áp dụng tư tưởng <strong>Strategy Pattern</strong> để tách riêng thuật toán xử lý của từng cổng thanh toán. Mỗi provider như VNPay, MoMo và ZaloPay có cách tạo payment URL, ký chữ ký điện tử, kiểm tra callback và cập nhật trạng thái giao dịch khác nhau. Vì vậy hệ thống cô lập các logic này vào các lớp riêng: <code>VNPayServiceImpl</code>, <code>MoMoServiceImpl</code> và <code>ZaloPayServiceImpl</code>.
+                </p>
+                <p style="margin-bottom: var(--space-2);">
+                  Khi cần tạo giao dịch hoặc xử lý callback, tầng điều phối như <code>PaymentCommandConsumer</code> và <code>PaymentController</code> chỉ gọi đúng service tương ứng, không chứa chi tiết thuật toán ký HMAC, sinh mã giao dịch hay phân tích response của từng nhà cung cấp.
+                </p>
+                <p style="margin-bottom: 0;">
+                  <strong>Lý do chọn pattern:</strong> Pattern này giúp code dễ mở rộng theo nguyên lý Open/Closed. Nếu sau này thêm cổng mới như ShopeePay hoặc Apple Pay, nhóm chỉ cần bổ sung một provider service mới mà không sửa sâu logic VNPay, MoMo, ZaloPay hiện có. Đồng thời mỗi provider có thể được unit test độc lập, giảm rủi ro lỗi dây chuyền khi thay đổi cấu hình hoặc callback của một cổng thanh toán.
+                </p>
+              </div>
+
+              <div class="diagram-wrapper" style="margin-bottom: var(--space-3);">
+                <pre class="mermaid">
+                  flowchart LR
+                    classDef command fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,rx:8px,ry:8px;
+                    classDef service fill:#ecfdf5,stroke:#10b981,stroke-width:1.5px,rx:8px,ry:8px;
+                    classDef decision fill:#eef2ff,stroke:#6366f1,stroke-width:1.5px,rx:8px,ry:8px;
+                    classDef event fill:#fee2e2,stroke:#ef4444,stroke-width:1.5px,rx:8px,ry:8px;
+                    classDef store fill:#fafaf9,stroke:#78716c,stroke-width:1.5px,rx:6px,ry:6px;
+
+                    Commands["bookstore.commands&lt;br/&gt;payment.create.command"]:::command
+                    Consumer["PaymentCommandConsumer&lt;br/&gt;handleCreate"]:::service
+                    Idempotency{"markProcessed(eventId)&lt;br/&gt;đã xử lý?"}:::decision
+                    Duplicate["ACK và bỏ qua&lt;br/&gt;không chạy nghiệp vụ lần hai"]:::store
+                    Factory["createProviderPayment(command, request)&lt;br/&gt;Simple Factory / Dispatcher"]:::service
+                    Method{"paymentMethod"}:::decision
+
+                    VNPay["VNPAY branch&lt;br/&gt;vnPayService.createVNPayPaymentUrl"]:::service
+                    MoMo["MOMO branch&lt;br/&gt;moMoService.createMoMoPayment"]:::service
+                    ZaloPay["ZALOPAY branch&lt;br/&gt;zaloPayService.createOrderTransaction"]:::service
+                    Cash["CASH&lt;br/&gt;lưu Payment COMPLETED"]:::service
+
+                    Response["CreatePaymentResponse&lt;br/&gt;paymentId + paymentUrl + status"]:::store
+                    Pending["Lưu Payment PENDING&lt;br/&gt;transactionId + paymentUrl"]:::store
+                    Created["publish payment.created"]:::event
+                    Completed["publish payment.completed"]:::event
+                    Failed["publish payment.failed"]:::event
+                    Events["bookstore.events"]:::event
+
+                    Commands --> Consumer
+                    Consumer --> Idempotency
+                    Idempotency -->|Có| Duplicate
+                    Idempotency -->|Chưa| Factory
+                    Factory --> Method
+                    Method -->|VNPAY| VNPay
+                    Method -->|MOMO| MoMo
+                    Method -->|ZALOPAY| ZaloPay
+                    Method -->|CASH| Cash
+                    VNPay --> Response
+                    MoMo --> Response
+                    ZaloPay --> Response
+                    Response --> Pending
+                    Pending --> Created
+                    Cash --> Completed
+                    Factory -->|provider lỗi / method không hỗ trợ| Failed
+                    Created --> Events
+                    Completed --> Events
+                    Failed --> Events
+                </pre>
+                <div class="diagram-caption">Hình 7.2: Simple Factory Pattern - chọn provider theo paymentMethod trong PaymentCommandConsumer</div>
+              </div>
+
+              <div class="callout warning" style="margin-bottom: 0;">
+                <strong>Nội dung báo cáo Simple Factory Pattern:</strong>
+                <p style="margin-top: var(--space-2); margin-bottom: var(--space-2);">
+                  Trong luồng Saga, <code>payment-service</code> nhận lệnh <code>payment.create.command</code> từ RabbitMQ. Lệnh này chỉ chứa dữ liệu nghiệp vụ và trường <code>paymentMethod</code>. Phương thức <code>createProviderPayment</code> trong <code>PaymentCommandConsumer</code> đóng vai trò <strong>Simple Factory / Dispatcher</strong>: nó đọc <code>paymentMethod</code>, sau đó chọn đúng provider để xử lý, ví dụ <code>VNPAY</code> gọi <code>vnPayService.createVNPayPaymentUrl</code>, <code>MOMO</code> gọi <code>moMoService.createMoMoPayment</code>, <code>ZALOPAY</code> gọi <code>zaloPayService.createOrderTransaction</code>.
+                </p>
+                <p style="margin-bottom: var(--space-2);">
+                  Nhờ Factory này, Saga Orchestrator và message consumer không cần biết chi tiết cách từng cổng thanh toán hoạt động. Sau khi provider trả về <code>CreatePaymentResponse</code>, consumer tiếp tục lưu payment, publish <code>payment.created</code>, hoặc publish <code>payment.completed</code> ngay với phương thức COD.
+                </p>
+                <p style="margin-bottom: 0;">
+                  <strong>Lý do chọn pattern:</strong> Simple Factory phù hợp vì quyết định chọn provider hiện chỉ phụ thuộc vào một input rõ ràng là <code>paymentMethod</code>. Pattern này gom toàn bộ logic rẽ nhánh vào một điểm duy nhất, tránh lặp <code>switch/if-else</code> ở nhiều nơi, giúp luồng Saga dễ đọc hơn và đảm bảo mọi provider đều trả về cùng một kiểu kết quả thống nhất cho bước xử lý tiếp theo.
+                </p>
+              </div>
+
+              <div class="callout info" style="margin-top: var(--space-3); margin-bottom: 0;">
+                <strong>Lưu ý thiết kế:</strong> Payment Service không khai báo một interface chung tên <code>PaymentStrategy</code>. Thay vào đó, hệ thống đang dùng 3 interface riêng (<code>VNPayService</code>, <code>MoMoService</code>, <code>ZaloPayService</code>) và 3 implementation độc lập. Vì vậy sơ đồ ghi là <strong>Strategy-like Provider Family</strong> để phản ánh đúng code hiện tại.
+              </div>
             </div>
 
             <div class="grid-2">
