@@ -1,0 +1,834 @@
+<!--
+  ========================================
+  ORDER & PAYMENT SPECIFICATION DOCUMENT
+  System Spec UI System | Lang: vi
+  ========================================
+-->
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Đặc tả Chức năng Đặt hàng & Thanh toán - Bookstore Microservices</title>
+    <meta name="ai-context" content="order-payment-spec" />
+    <meta name="ai-version" content="1.5" />
+    <link rel="stylesheet" href="styles.css?v=1.5" />
+  </head>
+  <body>
+
+    <header class="hero">
+      <div class="container hero-inner">
+        <p class="eyebrow">Đặc tả Kỹ thuật - Bookstore Microservices</p>
+        <h1>Chức năng Đặt hàng & Thanh toán (Saga E2E)</h1>
+        <p class="lead">
+          Tài liệu chi tiết về kiến trúc, luồng nghiệp vụ và tích hợp kỹ thuật giữa Frontend (Next.js) và các Backend Microservices (Order, Payment, Saga Orchestrator) thông qua RabbitMQ.
+        </p>
+        <div class="chip-row">
+          <span class="chip">Saga Orchestrator</span>
+          <span class="chip">RabbitMQ</span>
+          <span class="chip">Spring Boot 4.0.5</span>
+          <span class="chip">Next.js App Router</span>
+          <span class="chip">VNPay / MoMo / ZaloPay</span>
+          <span class="chip">Idempotency Key</span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div class="container main-layout">
+        <!-- Sticky Sidebar Navigation -->
+        <aside class="sidebar">
+          <nav class="sticky-nav" id="sidebar-nav">
+            <p class="sidebar-title">Mục lục</p>
+            <ul>
+              <li><a href="#overview" class="active">Tổng quan kiến trúc</a></li>
+              <li><a href="#checkout-ui">Nghiệp vụ Checkout UI</a></li>
+              <li><a href="#payment-integration">Tích hợp cổng Thanh toán</a></li>
+              <li><a href="#payment-details">Chi tiết phương thức thanh toán</a></li>
+              <li><a href="#saga-orchestration">Cơ chế Saga & Bù trừ</a></li>
+              <li><a href="#api-endpoints">Đặc tả API Endpoints</a></li>
+              <li><a href="#db-mq-schema">Database & MQ Schema</a></li>
+            </ul>
+          </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <div class="content-area">
+
+          <!-- Section 1: Overview -->
+          <section class="section" id="overview" style="padding: 0 0 var(--space-4) 0; border-bottom: 1px solid var(--line);">
+            <h2 class="section-title anchor-header">
+              <a href="#overview" class="anchor-link">#</a>
+              Tổng quan kiến trúc
+            </h2>
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <p class="kicker">Mô hình Điều phối Saga (Orchestrated Saga Pattern)</p>
+              <p>
+                Để đảm bảo tính toàn vẹn dữ liệu (Eventual Consistency) trong hệ thống microservices, quy trình Checkout được chuyển đổi hoàn toàn từ gọi đồng bộ trực tiếp sang mô hình điều phối tập trung (Saga Orchestration). Dịch vụ <code>bookstore-saga-orchestrator-service</code> đóng vai trò điều phối trung tâm, gửi lệnh (Commands) và lắng nghe sự kiện (Events) từ các dịch vụ thành phần tham gia (Order, Book, Promotion, Shipping, Cart, Payment) thông qua RabbitMQ Broker.
+              </p>
+              <p style="margin-top: var(--space-2);">
+                Dưới đây là sơ đồ kiến trúc các dịch vụ và luồng truyền thông điệp chính trong hệ thống:
+              </p>
+            </div>
+
+            <!-- Architecture Diagram -->
+            <div class="diagram-wrapper">
+              <pre class="mermaid">
+                graph TD
+                  classDef client fill:#eef2ff,stroke:#6366f1,stroke-width:1.5px,rx:8px,ry:8px;
+                  classDef gateway fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,rx:8px,ry:8px;
+                  classDef orchestrator fill:#fef08a,stroke:#ca8a04,stroke-width:1.5px,rx:8px,ry:8px;
+                  classDef mq fill:#fee2e2,stroke:#ef4444,stroke-width:1.5px,rx:6px,ry:6px;
+                  classDef service fill:#ecfdf5,stroke:#10b981,stroke-width:1.5px,rx:8px,ry:8px;
+
+                  Web[Next.js Frontend]:::client
+                  Gateway[Spring Cloud Gateway]:::gateway
+                  Orchestrator[Saga Orchestrator Service]:::orchestrator
+                  MQ[RabbitMQ Broker]:::mq
+
+                  subgraph ServiceGroup [Services tham gia Saga]
+                    Order[Order Service]:::service
+                    Book[Book Service]:::service
+                    Promo[Promotion Service]:::service
+                    Ship[Shipping Service]:::service
+                    Cart[Cart Service]:::service
+                    Payment[Payment Service]:::service
+                  end
+
+                  Web -->|1. POST /api/v1/checkout| Gateway
+                  Gateway -->|2. Forward| Orchestrator
+                  Orchestrator -->|3. Publish Commands| MQ
+                  
+                  MQ -->|4. Route commands| Order
+                  MQ --> Book
+                  MQ --> Promo
+                  MQ --> Ship
+                  MQ --> Cart
+                  MQ --> Payment
+
+                  Order -->|5. Publish Events| MQ
+                  Book --> MQ
+                  Promo --> MQ
+                  Ship --> MQ
+                  Cart --> MQ
+                  Payment --> MQ
+
+                  MQ -->|6. Route events| Orchestrator
+                  Web -->|7. Poll Saga: /api/v1/checkout/:sagaId| Orchestrator
+              </pre>
+              <div class="diagram-caption">Hình 1.1: Sơ đồ kiến trúc tổng thể tích hợp Đặt hàng & Thanh toán qua Saga</div>
+            </div>
+
+            <!-- Tech Stack Swatches / Table -->
+            <div class="grid-2">
+              <div class="card">
+                <p class="kicker">Công nghệ sử dụng</p>
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Thành phần</th>
+                      <th>Công nghệ</th>
+                      <th>Phiên bản</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Backend Core</td><td>Spring Boot</td><td>4.0.5</td></tr>
+                    <tr><td>Spring Cloud</td><td>Spring Cloud / Feign</td><td>2025.1.1</td></tr>
+                    <tr><td>Java Version</td><td>Java SDK</td><td>21</td></tr>
+                    <tr><td>Message Broker</td><td>RabbitMQ</td><td>3-management</td></tr>
+                    <tr><td>Frontend</td><td>Next.js (App Router)</td><td>TypeScript, Tailwind CSS</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="card">
+                <p class="kicker">Nguyên tắc giao tiếp</p>
+                <div class="callout info" style="margin-bottom: 0;">
+                  <strong>Database per Service:</strong> Mỗi service tương tác với database riêng biệt. Tuyệt đối không truy cập chéo DB. Giao tiếp bất đồng bộ qua RabbitMQ với 2 exchange chính: <code>bookstore.commands</code> (cho lệnh) và <code>bookstore.events</code> (cho sự kiện). Cơ chế lọc trùng điệp thông tin (Idempotency) được xử lý thông qua bảng <code>processed_message</code> tại mỗi service tham gia.
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Section 2: Checkout UI -->
+          <section class="section" id="checkout-ui" style="padding: var(--space-4) 0; border-bottom: 1px solid var(--line);">
+            <h2 class="section-title anchor-header">
+              <a href="#checkout-ui" class="anchor-link">#</a>
+              Nghiệp vụ Checkout UI
+            </h2>
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <p class="kicker">Quy trình xử lý tại Next.js Frontend</p>
+              <p>
+                Khi người dùng truy cập trang giỏ hàng và nhấn "Thanh toán", hệ thống sẽ chuyển hướng đến trang <code>/checkout</code>. Ở đây, các bước xử lý sau được thực hiện tuần tự:
+              </p>
+              <ol style="padding-left: var(--space-3); margin-top: var(--space-2); line-height: 1.8;">
+                <li><strong>Tải danh sách địa chỉ nhận hàng:</strong> Gọi API <code>addressService.getUserAddresses()</code>. Nếu chưa có địa chỉ, yêu cầu người dùng thêm mới qua modal <code>AddressSelectModal</code>.</li>
+                <li><strong>Tính toán phí vận chuyển tự động:</strong> Mỗi khi người dùng thay đổi địa chỉ giao hàng hoặc danh sách mặt hàng, frontend sẽ kích hoạt tính toán phí vận chuyển bằng cách gọi <code>shipmentService.calculateShippingFee(districtId, wardCode, payload)</code>. Phí vận chuyển hiển thị động trong phần tổng hóa đơn.</li>
+                <li><strong>Áp dụng mã giảm giá (Voucher):</strong> Nhập mã voucher và kiểm tra tính hợp lệ bằng <code>promotionsService.validatePromotion(code, subtotal, bookIds)</code>. Số tiền giảm giá được hiển thị ngay lập tức và trừ trực tiếp vào tổng tiền thanh toán.</li>
+                <li><strong>Chọn phương thức thanh toán:</strong> COD (Tiền mặt khi nhận hàng), hoặc Thanh toán Online (VNPay, MoMo, ZaloPay).</li>
+              </ol>
+            </div>
+
+            <div class="grid-2">
+              <div class="card">
+                <p class="kicker">Ràng buộc Nghiệp vụ: Chênh lệch giá & Giỏ hàng</p>
+                <div class="callout warning" style="margin-bottom: 0;">
+                  <strong>Price Snapshots Validation:</strong> Để tránh việc người dùng đặt hàng với giá cũ (đặc biệt khi giá sách được quản trị viên cập nhật khi đang chọn thanh toán), trước khi gửi yêu cầu checkout, frontend gọi lại <code>cartService.getCart()</code> để lấy thông tin giỏ hàng mới nhất và so sánh chênh lệch giá với các items lưu trữ cục bộ. Nếu phát hiện chênh lệch giá lớn hơn <code>0.01</code>, hệ thống sẽ xóa mã giảm giá đang áp dụng, thông báo lỗi <em>"Giá đã thay đổi. Vui lòng kiểm tra lại giỏ hàng."</em>, tải lại giỏ hàng mới nhất và dừng luồng thanh toán.
+                </div>
+              </div>
+
+              <div class="card">
+                <p class="kicker">Ví dụ Dữ liệu Checkout Request</p>
+                <div class="code-wrapper" style="margin-bottom: 0;">
+                  <div class="code-header">
+                    <span>CheckoutRequest DTO</span>
+                    <button class="btn-copy">Copy</button>
+                  </div>
+                  <pre class="code-block">{
+  "addressId": "8f86df33-3112-40df-90a6-9ea3c7e098a5",
+  "paymentMethod": "VNPay",
+  "note": "Giao giờ hành chính",
+  "bookIds": [
+    "c8a14e9f-7db9-4672-9115-4ba8f2203de6",
+    "c8a14e9f-7db9-4672-9115-4ba8f2203de6"
+  ],
+  "priceSnapshotItems": [
+    {
+      "bookId": "c8a14e9f-7db9-4672-9115-4ba8f2203de6",
+      "quantity": 2,
+      "unitPrice": 120000.0
+    }
+  ],
+  "shippingFee": 30000.0,
+  "redirectUrl": "http://localhost:3000/payment/vnpay/return",
+  "discountCode": "GIAM20K"
+}</pre>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Section 3: Payment Integration -->
+          <section class="section" id="payment-integration" style="padding: var(--space-4) 0; border-bottom: 1px solid var(--line);">
+            <h2 class="section-title anchor-header">
+              <a href="#payment-integration" class="anchor-link">#</a>
+              Tích hợp cổng Thanh toán
+            </h2>
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <p class="kicker">Cơ chế xử lý Thanh toán Online (VNPay / MoMo / ZaloPay)</p>
+              <p>
+                Trong luồng thanh toán online, bước tạo giao dịch thanh toán được quản lý bất đồng bộ bởi Saga thông qua lệnh <code>payment.create.command</code> gửi đến <code>payment-service</code>. 
+              </p>
+              <p style="margin-top: var(--space-2);">
+                Dưới đây là sơ đồ trình tự quá trình người dùng chuyển hướng sang cổng thanh toán và xử lý kết quả trả về từ cổng thanh toán (Callback/Redirect):
+              </p>
+            </div>
+
+            <!-- Callback Sequence Diagram -->
+            <div class="diagram-wrapper">
+              <pre class="mermaid">
+                sequenceDiagram
+                  autonumber
+                  actor User as Khach hang
+                  participant FE as Next.js Frontend
+                  participant GW as "API Gateway (Port 8080)"
+                  participant PayService as Payment Service
+                  participant Gateway as "Cong VNPay/MoMo/ZaloPay"
+
+                  FE->>GW: 1. Poll trang thai Saga GET /api/v1/checkout/:sagaId
+                  GW-->>FE: 2. Tra ve trang thai Saga kem paymentUrl
+                  FE->>User: 3. Chuyen huong trinh duyet den cong thanh toan
+                  User->>Gateway: 4. Nhap thong tin va thuc hien thanh toan
+                  Gateway->>User: 5. Redirect trinh duyet ve callback cua Payment Service
+                  Note right of User: Redirect: GET /api/v1/payment/vnpay/callback
+                  User->>PayService: 6. Gui request redirect kem chu ky dien tu
+                  PayService->>PayService: 7. Xac thuc signature va cap nhat Payment
+                  PayService-->>GW: 8. Publish EVENT: payment.completed
+                  PayService->>User: 9. Redirect trinh duyet ve FE Return Page
+                  Note right of User: Redirect: /payment/vnpay/return?resultCode=00...
+                  User->>FE: 10. FE hien thi thanh cong va chuyen huong ve don hang
+              </pre>
+              <div class="diagram-caption">Hình 3.1: Luồng chuyển hướng thanh toán và xử lý kết quả Callback</div>
+            </div>
+
+            <div class="grid-2">
+              <div class="card">
+                <p class="kicker">Nguyên tắc Xác thực Checksum tại Callback</p>
+                <div class="callout warning" style="margin-bottom: 0; font-size: 0.92rem;">
+                  <strong>ZaloPay Redirect Checksum:</strong> Với cổng ZaloPay, khi xử lý redirect trả về phía client, <code>payment-service</code> thực hiện kiểm tra mã checksum nghiêm ngặt từ các tham số trả về bao gồm <code>appid</code>, <code>apptransid</code>, <code>pmcid</code>, <code>bankcode</code>, <code>amount</code>, <code>discountamount</code>, <code>status</code> nối với nhau bằng ký tự <code>|</code> và băm HMAC-SHA256 bằng khóa bí mật <code>key2</code> để chống gian lận tham số giao dịch.
+                </div>
+              </div>
+
+              <div class="card">
+                <p class="kicker">Xử lý Lỗi Giao dịch Thất bại</p>
+                <div class="callout danger" style="margin-bottom: 0; font-size: 0.92rem;">
+                  <strong>Payment Failed Event:</strong> Nếu người dùng hủy thanh toán hoặc thanh toán không thành công tại cổng (ví dụ VNPay trả về mã ResponseCode khác "00", MoMo trả về ResultCode khác "0"), <code>payment-service</code> sẽ gọi phương thức <code>markPaymentFailed(appTransId)</code> và publish sự kiện <code>payment.failed</code> qua exchange <code>bookstore.events</code>. Sự kiện này là tín hiệu đầu vào kích hoạt luồng bù trừ hủy đơn hàng của Saga Orchestrator, giúp giải phóng kho và voucher ngay lập tức.
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Section: Payment Method Details -->
+          <section class="section" id="payment-details" style="padding: var(--space-4) 0; border-bottom: 1px solid var(--line);">
+            <h2 class="section-title anchor-header">
+              <a href="#payment-details" class="anchor-link">#</a>
+              Chi tiết phương thức thanh toán
+            </h2>
+            
+            <!-- COD Details -->
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <p class="kicker">1. COD (Thanh toán khi nhận hàng)</p>
+              <div class="grid-2">
+                <div>
+                  <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem;">Nguyên lý hoạt động & Tích hợp</h4>
+                  <p style="font-size: 0.92rem; line-height: 1.6; margin-bottom: var(--space-3);">
+                    Không giao tiếp qua cổng thanh toán trực tuyến. Luồng Saga của đơn COD bỏ qua bước gọi sang <code>payment-service</code> và trực tiếp chuyển trạng thái sang <code>PAYMENT_SKIPPED</code>. Giá trị tiền cần thu hộ (COD Amount) được gửi kèm trong <code>shipping.create.command</code> bằng đúng tổng giá trị đơn hàng (sau khi trừ khuyến mãi và cộng phí giao hàng thực tế).
+                  </p>
+                </div>
+                <div>
+                  <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem;">Cơ chế xác thực & xử lý</h4>
+                  <div class="callout info" style="margin-bottom: 0; font-size: 0.88rem;">
+                    <strong>Không có chữ ký số:</strong> Việc xác thực giao dịch diễn ra hoàn toàn ngoài đời thực (Offline). Sau khi đơn hàng chuyển sang trạng thái <code>DELIVERED</code> thành công, bên đối tác vận chuyển thực hiện thu hộ tiền mặt và đối soát định kỳ. Khi nhận tiền đối soát, hệ thống cập nhật thủ công hoặc tự động qua webhook của Shipping Service để đổi đơn hàng sang trạng thái cuối cùng là <code>COMPLETED</code>.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- VNPay Details -->
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <p class="kicker">2. VNPay (Cổng thanh toán VNPay)</p>
+              <div class="grid-2">
+                <div>
+                  <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem;">Tích hợp & Khởi tạo</h4>
+                  <p style="font-size: 0.92rem; line-height: 1.6; margin-bottom: var(--space-3);">
+                    Sử dụng giao thức HTTP GET/POST để tạo yêu cầu thanh toán. Hệ thống gửi tập hợp các tham số quy định bởi VNPay (như <code>vnp_Version</code>, <code>vnp_Command</code>, <code>vnp_TmnCode</code>, <code>vnp_Amount</code>, <code>vnp_CurrCode</code>, <code>vnp_TxnRef</code>, <code>vnp_OrderInfo</code>, <code>vnp_ReturnUrl</code>, <code>vnp_IpAddr</code>, <code>vnp_CreateDate</code>) để sinh đường dẫn thanh toán an toàn (paymentUrl).
+                  </p>
+                </div>
+                <div>
+                  <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem;">Cơ chế băm bảo mật (HMAC-SHA512)</h4>
+                  <div class="code-wrapper" style="margin-bottom: 0;">
+                    <div class="code-header">
+                      <span>Công thức mã hóa VNPay</span>
+                    </div>
+                    <pre class="code-block">vnp_SecureHash = HMAC-SHA512(
+  hashSecret, 
+  SortedQueryString(param1=val1&param2=val2...)
+)</pre>
+                  </div>
+                  <p style="font-size: 0.86rem; color: var(--muted); margin-top: var(--space-1);">
+                    *Lưu ý: Tất cả các tham số gửi đi hoặc nhận về (trừ SecureHash) đều phải sắp xếp theo bảng chữ cái alphabet trước khi thực hiện băm.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- MoMo Details -->
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <p class="kicker">3. MoMo (Ví điện tử MoMo)</p>
+              <div class="grid-2">
+                <div>
+                  <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem;">Tích hợpcapture ví (Capture Wallet)</h4>
+                  <p style="font-size: 0.92rem; line-height: 1.6; margin-bottom: var(--space-3);">
+                    Tương tác qua giao thức RESTful API. Hệ thống thực hiện gửi yêu cầu POST JSON trực tiếp lên máy chủ MoMo chứa các thông tin <code>partnerCode</code>, <code>requestId</code>, <code>amount</code>, <code>orderId</code>, <code>orderInfo</code>, <code>redirectUrl</code>, <code>ipnUrl</code> và nhận về phản hồi chứa liên kết thanh toán <code>payUrl</code>.
+                  </p>
+                </div>
+                <div>
+                  <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem;">Thuật toán ký số HMAC-SHA256</h4>
+                  <div class="code-wrapper" style="margin-bottom: 0;">
+                    <div class="code-header">
+                      <span>Chuỗi dữ liệu ký (Raw Data String)</span>
+                    </div>
+                    <pre class="code-block">accessKey=...&amount=...&extraData=...&ipnUrl=...&orderId=...&orderInfo=...&partnerCode=...&redirectUrl=...&requestId=...&requestType=captureWallet</pre>
+                  </div>
+                  <p style="font-size: 0.88rem; margin-top: var(--space-2);">
+                    MoMo verify chữ ký điện tử bất đồng bộ tại callback IPN và đồng bộ khi người dùng redirect. Nếu chữ ký không khớp, ném lỗi <code>INVALID_SIGNATURE</code>.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- ZaloPay Details -->
+            <div class="card">
+              <p class="kicker">4. ZaloPay (Ví điện tử ZaloPay)</p>
+              <div class="grid-2">
+                <div>
+                  <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem;">Tích hợp & Phản hồi đa kênh</h4>
+                  <p style="font-size: 0.92rem; line-height: 1.6; margin-bottom: var(--space-3);">
+                    Hệ thống gọi POST API tạo đơn hàng ZaloPay với mã giao dịch <code>apptransid</code> định dạng <code>yyMMdd_timestamp</code>. ZaloPay gửi xác nhận giao dịch qua 2 luồng: Webhook Callback (Server-to-Server) và Client Redirect.
+                  </p>
+                </div>
+                <div>
+                  <h4 style="font-family: 'Lora', serif; margin-bottom: var(--space-2); font-size: 1.05rem;">Xác thực MAC và Checksum an toàn</h4>
+                  <ul style="font-size: 0.88rem; padding-left: var(--space-3); line-height: 1.8;">
+                    <li><strong>Tạo đơn (Key 1):</strong> <code>mac = HMAC-SHA256(key1, appid|apptransid|appuser|amount|apptime|embeddata|item)</code></li>
+                    <li><strong>Nhận Callback (Key 2):</strong> Băm lại chuỗi JSON <code>data</code> nhận được để so sánh đối chiếu chữ ký <code>mac</code> trong request body.</li>
+                    <li><strong>Nhận Redirect (Key 2):</strong> <code>checksum = HMAC-SHA256(key2, appid|apptransid|pmcid|bankcode|amount|discountamount|status)</code> để chống sửa đổi phía client.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Section 4: Saga & Compensation -->
+          <section class="section" id="saga-orchestration" style="padding: var(--space-4) 0; border-bottom: 1px solid var(--line);">
+            <h2 class="section-title anchor-header">
+              <a href="#saga-orchestration" class="anchor-link">#</a>
+              Cơ chế Saga & Bù trừ
+            </h2>
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <p class="kicker">12 Trạng thái của Saga Instance (Saga Lifecycle)</p>
+              <p>
+                Vòng đời của một luồng checkout đi qua các trạng thái tuần tự dưới đây được ghi nhận tại bảng <code>saga_instances</code>:
+              </p>
+              <div class="stack" style="margin-top: var(--space-2); margin-bottom: var(--space-2);">
+                <span class="status-label stable">STARTED</span>
+                <span class="status-label stable">ORDER_CREATED</span>
+                <span class="status-label stable">STOCK_RESERVED</span>
+                <span class="status-label stable">PROMOTION_RESERVED</span>
+                <span class="status-label stable">PAYMENT_PENDING</span>
+                <span class="status-label stable">PAYMENT_COMPLETED</span>
+                <span class="status-label stable">SHIPPING_CREATED</span>
+                <span class="status-label stable">ORDER_CONFIRMED</span>
+                <span class="status-label stable">STOCK_CONFIRMED</span>
+                <span class="status-label stable">PROMOTION_CONFIRMED</span>
+                <span class="status-label stable">CART_CLEARED</span>
+                <span class="status-label stable">COMPLETED</span>
+              </div>
+              <p style="font-size: 0.95rem;">
+                <em>Ghi chú:</em> Trạng thái <code>PAYMENT_SKIPPED</code> được áp dụng đối với các đơn hàng COD để bỏ qua bước tạo giao dịch thanh toán online.
+              </p>
+            </div>
+
+            <!-- Happy Path Sequence Diagram -->
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <p class="kicker">Sơ đồ Sequence Luồng Happy Path (Tất cả thành công)</p>
+              <div class="diagram-wrapper">
+                <pre class="mermaid">
+                  sequenceDiagram
+                    autonumber
+                    actor Client as Frontend Client
+                    participant Orchestrator as Saga Orchestrator
+                    participant Order as Order Service
+                    participant Book as Book Service
+                    participant Promo as Promotion Service
+                    participant Ship as Shipping Service
+                    participant Payment as Payment Service
+                    participant Cart as Cart Service
+
+                    Client->>Orchestrator: POST /api/v1/checkout
+                    Orchestrator->>Order: COMMAND: order.create.command
+                    Order->>Order: Tao Order voi trang thai PENDING
+                    Order-->>Orchestrator: EVENT: order.created
+                    Orchestrator->>Book: COMMAND: book.stock.reserve.command
+                    Book->>Book: Giu so luong sach trong kho
+                    Book-->>Orchestrator: EVENT: book.stock.reserved
+                    Orchestrator->>Promo: COMMAND: promotion.reserve.command
+                    Promo->>Promo: Giu luot su dung ma voucher
+                    Promo-->>Orchestrator: EVENT: promotion.reserved
+                    Orchestrator->>Ship: COMMAND: shipping.create.command
+                    Ship->>Ship: Tao van don giao hang
+                    Ship-->>Orchestrator: EVENT: shipping.created
+                    Orchestrator->>Payment: COMMAND: payment.create.command
+                    Payment->>Payment: Khoi tao URL thanh toan
+                    Payment-->>Orchestrator: EVENT: payment.created
+                    Orchestrator->>Client: Tra ve paymentUrl
+                    Client->>Payment: Nguoi dung thanh toan thanh cong
+                    Payment-->>Orchestrator: EVENT: payment.completed
+                    Orchestrator->>Order: COMMAND: order.confirm.command
+                    Order->>Order: Xac nhan Order voi trang thai CONFIRMED
+                    Order-->>Orchestrator: EVENT: order.confirmed
+                    Orchestrator->>Book: COMMAND: book.stock.confirm.command
+                    Book->>Book: Tru kho chinh thuc
+                    Book-->>Orchestrator: EVENT: book.stock.confirmed
+                    Orchestrator->>Promo: COMMAND: promotion.confirm.command
+                    Promo->>Promo: Tru luot dung voucher chinh thuc
+                    Promo-->>Orchestrator: EVENT: promotion.confirmed
+                    Orchestrator->>Cart: COMMAND: cart.clear.command
+                    Cart->>Cart: Xoa san pham khoi gio hang
+                    Cart-->>Orchestrator: EVENT: cart.cleared
+                    Orchestrator->>Client: Trang thai Saga la COMPLETED
+                </pre>
+                <div class="diagram-caption">Hình 4.1: Luồng tương tác các microservices khi thanh toán thành công</div>
+              </div>
+            </div>
+
+            <!-- Compensation Path Sequence Diagram -->
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <p class="kicker">Sơ đồ Luồng Bù trừ (Compensation Flow) khi Hết hàng</p>
+              <div class="diagram-wrapper">
+                <pre class="mermaid">
+                  sequenceDiagram
+                    autonumber
+                    actor Client as Frontend Client
+                    participant Orchestrator as Saga Orchestrator
+                    participant Order as Order Service
+                    participant Book as Book Service
+
+                    Client->>Orchestrator: POST /api/v1/checkout
+                    Orchestrator->>Order: COMMAND: order.create.command
+                    Order->>Order: Tao Order voi trang thai PENDING
+                    Order-->>Orchestrator: EVENT: order.created
+                    Orchestrator->>Book: COMMAND: book.stock.reserve.command
+                    Book->>Book: Kiem tra so luong va bao Het sach
+                    Book-->>Orchestrator: EVENT: book.stock.failed
+                    Note over Orchestrator: Bat dau tien trinh Bu tru (Rollback)
+                    Orchestrator->>Order: COMMAND: order.cancel.command
+                    Order->>Order: Cap nhat trang thai don thanh CANCELLED
+                    Order-->>Orchestrator: EVENT: order.cancelled
+                    Orchestrator->>Client: Trang thai Saga la FAILED
+                </pre>
+                <div class="diagram-caption">Hình 4.2: Luồng bù trừ rollback tự động khi một bước trung gian gặp sự cố</div>
+              </div>
+            </div>
+
+            <!-- Table of Compensation Stages -->
+            <div class="card">
+              <p class="kicker">Bảng Quy định các Bước Bù trừ (Compensation Matrix)</p>
+              <table class="table-tech">
+                <thead>
+                  <tr>
+                    <th>Bước Thất bại</th>
+                    <th>Trạng thái Saga trước đó</th>
+                    <th>Trình tự Bù trừ (Rollback Steps)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Tạo Order thất bại</strong></td>
+                    <td><code>STARTED</code></td>
+                    <td>Không cần bù trừ, đánh dấu Saga là <code>FAILED</code> ngay lập tức.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Giữ kho (Stock) thất bại</strong></td>
+                    <td><code>ORDER_CREATED</code></td>
+                    <td>Hủy Order (Gửi <code>order.cancel.command</code>).</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Giữ Voucher thất bại</strong></td>
+                    <td><code>STOCK_RESERVED</code></td>
+                    <td>Giải phóng kho (Gửi <code>book.stock.release.command</code>) &rarr; Hủy Order.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Tạo Vận đơn thất bại</strong></td>
+                    <td><code>PROMOTION_RESERVED</code></td>
+                    <td>Giải phóng voucher (Gửi <code>promotion.release.command</code>) &rarr; Giải phóng kho &rarr; Hủy Order.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Thanh toán Online thất bại / Quá hạn (15 phút)</strong></td>
+                    <td><code>PAYMENT_PENDING</code></td>
+                    <td>Hủy vận đơn (Gửi <code>shipping.cancel.command</code>) &rarr; Hoàn tiền nếu đã trừ (Gửi <code>payment.refund.command</code>) &rarr; Giải phóng voucher &rarr; Giải phóng kho &rarr; Hủy Order.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Section 5: API Endpoints -->
+          <section class="section" id="api-endpoints" style="padding: var(--space-4) 0; border-bottom: 1px solid var(--line);">
+            <h2 class="section-title anchor-header">
+              <a href="#api-endpoints" class="anchor-link">#</a>
+              Đặc tả API Endpoints
+            </h2>
+
+            <!-- Endpoint 1 -->
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3);">
+                <span class="badge post">POST</span>
+                <span class="status-label stable">Stable</span>
+                <span style="font-family: monospace; font-weight: bold; font-size: 1.05rem;">/api/v1/checkout</span>
+              </div>
+              <p style="margin-bottom: var(--space-3);">
+                Gửi yêu cầu mua hàng từ Frontend để bắt đầu tiến trình Saga điều phối thanh toán và tạo đơn hàng. Trả về mã định danh <code>sagaId</code> dùng để theo dõi tiến trình.
+              </p>
+              <div class="code-wrapper">
+                <div class="code-header">
+                  <span>Ví dụ Response (202 Accepted)</span>
+                  <button class="btn-copy">Copy</button>
+                </div>
+                <pre class="code-block">{
+  "code": 1000,
+  "message": "Checkout saga started",
+  "data": {
+    "sagaId": "4a7b1b34-8c65-4f5f-9d9f-a89e81b67272",
+    "orderId": null,
+    "status": "STARTED",
+    "totalAmount": null,
+    "paymentUrl": null,
+    "lastError": null,
+    "createdAt": "2026-06-02T12:08:27",
+    "updatedAt": "2026-06-02T12:08:27"
+  }
+}</pre>
+              </div>
+            </div>
+
+            <!-- Endpoint 2 -->
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3);">
+                <span class="badge get">GET</span>
+                <span class="status-label stable">Stable</span>
+                <span style="font-family: monospace; font-weight: bold; font-size: 1.05rem;">/api/v1/checkout/{sagaId}</span>
+              </div>
+              <p style="margin-bottom: var(--space-3);">
+                Frontend gửi yêu cầu định kỳ (Polling) để kiểm tra tiến độ thực hiện của Saga. Khi Saga đạt trạng thái <code>PAYMENT_PENDING</code>, API sẽ trả về <code>paymentUrl</code> của cổng thanh toán tương ứng.
+              </p>
+              <div class="code-wrapper">
+                <div class="code-header">
+                  <span>Ví dụ Response (200 OK)</span>
+                  <button class="btn-copy">Copy</button>
+                </div>
+                <pre class="code-block">{
+  "code": 1000,
+  "message": "Checkout saga loaded",
+  "data": {
+    "sagaId": "4a7b1b34-8c65-4f5f-9d9f-a89e81b67272",
+    "orderId": "d80b7e41-0f62-4217-bc1a-6df261b0a8bb",
+    "status": "PAYMENT_PENDING",
+    "totalAmount": 270000.0,
+    "paymentUrl": "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=27000000&vnp_Command=pay...",
+    "lastError": null,
+    "createdAt": "2026-06-02T12:08:27",
+    "updatedAt": "2026-06-02T12:08:35"
+  }
+}</pre>
+              </div>
+            </div>
+
+            <!-- Endpoint 3 -->
+            <div class="card">
+              <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3);">
+                <span class="badge get">GET</span>
+                <span class="status-label stable">Stable</span>
+                <span style="font-family: monospace; font-weight: bold; font-size: 1.05rem;">/api/v1/payment/vnpay/callback</span>
+              </div>
+              <p style="margin-bottom: var(--space-3);">
+                Endpoint do VNPay gọi về sau khi khách hàng thực hiện giao dịch. Hệ thống sẽ verify chữ ký, cập nhật trạng thái thanh toán và redirect khách hàng về trang hiển thị kết quả của frontend.
+              </p>
+              <table class="table-tech" style="margin-bottom: 0;">
+                <thead>
+                  <tr>
+                    <th>Tham số</th>
+                    <th>Kiểu dữ liệu</th>
+                    <th>Bắt buộc</th>
+                    <th>Mô tả</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>vnp_ResponseCode</code></td><td>String</td><td>Có*</td><td>Mã kết quả giao dịch ("00" là thành công).</td></tr>
+                  <tr><td><code>vnp_TxnRef</code></td><td>String</td><td>Có*</td><td>Mã giao dịch tham chiếu (ở đây là mã <code>paymentId</code>).</td></tr>
+                  <tr><td><code>vnp_SecureHash</code></td><td>String</td><td>Có*</td><td>Chuỗi bảo mật để xác thực tính toàn vẹn dữ liệu.</td></tr>
+                  <tr><td><code>vnp_Amount</code></td><td>Long</td><td>Có*</td><td>Số tiền giao dịch nhân với 100.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Section 6: Database & MQ Schema -->
+          <section class="section" id="db-mq-schema" style="padding: var(--space-4) 0 0 0;">
+            <h2 class="section-title anchor-header">
+              <a href="#db-mq-schema" class="anchor-link">#</a>
+              Database & MQ Schema
+            </h2>
+
+            <div class="grid-2">
+              <!-- DB Schema Card -->
+              <div class="card">
+                <p class="kicker">Cơ sở dữ liệu: bảng <code>saga_instances</code></p>
+                <div class="table-responsive" style="box-shadow: none;">
+                  <table class="table-tech" style="font-size: 0.85rem;">
+                    <thead>
+                      <tr>
+                        <th>Trường dữ liệu</th>
+                        <th>Kiểu dữ liệu</th>
+                        <th>Mô tả</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>saga_id</code></td><td>VARCHAR(36) [PK]</td><td>Mã định danh duy nhất của Saga.</td></tr>
+                      <tr><td><code>order_id</code></td><td>VARCHAR(36)</td><td>Mã đơn hàng được tạo tương ứng.</td></tr>
+                      <tr><td><code>status</code></td><td>VARCHAR(30)</td><td>Trạng thái hiện tại của luồng Saga.</td></tr>
+                      <tr><td><code>payment_method</code></td><td>VARCHAR(15)</td><td>VNPay, MoMo, ZaloPay hoặc COD.</td></tr>
+                      <tr><td><code>payment_id</code></td><td>VARCHAR(50)</td><td>Mã giao dịch từ cổng thanh toán.</td></tr>
+                      <tr><td><code>payment_url</code></td><td>TEXT</td><td>Đường link thanh toán được sinh ra.</td></tr>
+                      <tr><td><code>total_amount</code></td><td>DOUBLE</td><td>Tổng tiền đơn hàng sau giảm giá và ship.</td></tr>
+                      <tr><td><code>last_error</code></td><td>VARCHAR(255)</td><td>Chi tiết lỗi kỹ thuật nếu Saga thất bại.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Message Queue Card -->
+              <div class="card">
+                <p class="kicker">Hàng đợi RabbitMQ & Định tuyến Sự kiện</p>
+                <div class="table-responsive" style="box-shadow: none;">
+                  <table class="table-tech" style="font-size: 0.85rem;">
+                    <thead>
+                      <tr>
+                        <th>Exchange chuẩn</th>
+                        <th>Routing Key chính</th>
+                        <th>Dịch vụ đích / Chức năng</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><code>bookstore.commands</code></td>
+                        <td><code>order.create.command</code></td>
+                        <td><code>order-service</code> tạo đơn nháp.</td>
+                      </tr>
+                      <tr>
+                        <td><code>bookstore.commands</code></td>
+                        <td><code>payment.create.command</code></td>
+                        <td><code>payment-service</code> tạo link thanh toán.</td>
+                      </tr>
+                      <tr>
+                        <td><code>bookstore.events</code></td>
+                        <td><code>payment.completed</code></td>
+                        <td>Cổng thanh toán báo thành công &rarr; Saga.</td>
+                      </tr>
+                      <tr>
+                        <td><code>bookstore.commands</code></td>
+                        <td><code>payment.refund.command</code></td>
+                        <td>Bù trừ: Hoàn trả tiền cho khách hàng.</td>
+                      </tr>
+                      <tr>
+                        <td><code>bookstore.commands</code></td>
+                        <td><code>book.stock.release.command</code></td>
+                        <td>Bù trừ: Trả lại sách vào kho.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Idempotency Warning -->
+            <div class="card" style="margin-top: var(--space-4);">
+              <p class="kicker">Cơ chế Chống Trùng Lặp thông tin (Idempotent Consumer)</p>
+              <div class="callout warning" style="margin-bottom: 0;">
+                <strong>Processed Message Store:</strong> Vì RabbitMQ đảm bảo cơ chế phân phát ít nhất một lần (at-least-once delivery), việc trùng lặp gói tin là hoàn toàn có thể xảy ra. Tất cả các dịch vụ thành phần tham gia Saga đều sở hữu bảng <code>processed_message</code>. Mỗi khi nhận một command/event mới, service thực hiện ghi đè hoặc kiểm tra sự tồn tại của <code>eventId</code> trong bảng này trước khi xử lý nghiệp vụ thực tế. Nếu ID đã tồn tại, thông điệp sẽ bị bỏ qua lập tức nhằm tránh trừ kho 2 lần hoặc xác nhận thanh toán trùng lặp.
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-card">
+          <p>Tài liệu kỹ thuật đặc tả hệ thống Hamtech Bookstore. Bản quyền thuộc về Đội ngũ phát triển NotFound.</p>
+          <div class="chip-row">
+            <span class="chip">Phiên bản: 1.5</span>
+            <span class="chip">Ngày cập nhật: 02/06/2026</span>
+            <span class="chip">Ngôn ngữ: Tiếng Việt</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Script điều khiển chuyển Tab và cấu hình Mermaid.js -->
+    <script type="module">
+      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: 'base',
+        themeVariables: {
+          fontFamily: '"Be Vietnam Pro", "Segoe UI", sans-serif',
+          fontSize: '13px',
+          primaryColor: '#fffaf2',
+          primaryBorderColor: '#e5d9c8',
+          primaryTextColor: '#1b2430',
+          lineColor: '#0f6b63',
+          arrowheadColor: '#0f6b63',
+          background: '#ffffff',
+          clusterBkg: '#fbf8f3',
+          clusterBorder: '#e5d9c8',
+          actorBkg: '#fffaf2',
+          actorBorder: '#e5d9c8',
+          actorTextColor: '#1b2430',
+          signalColor: '#0f6b63',
+          signalTextColor: '#4b5563',
+          labelBoxBkgColor: '#fbf8f3',
+          labelBoxBorderColor: '#e5d9c8',
+          loopBkgColor: '#faf6ee'
+        },
+        flowchart: { 
+          useMaxWidth: false,
+          htmlLabels: true
+        },
+        sequence: { 
+          useMaxWidth: false,
+          showSequenceNumbers: true 
+        }
+      });
+    </script>
+
+    <!-- Script sao chép mã nguồn nhanh -->
+    <script>
+      document.querySelectorAll('.btn-copy').forEach(button => {
+        button.addEventListener('click', () => {
+          const wrapper = button.closest('.code-wrapper');
+          if (!wrapper) return;
+          
+          const codeBlock = wrapper.querySelector('.code-block');
+          if (!codeBlock) return;
+          
+          const codeText = codeBlock.textContent || codeBlock.innerText;
+          
+          navigator.clipboard.writeText(codeText).then(() => {
+            const originalText = button.textContent;
+            button.textContent = 'Copied! ✓';
+            
+            const origBg = button.style.background;
+            const origBorder = button.style.borderColor;
+            const origColor = button.style.color;
+            
+            button.style.background = 'var(--accent-2)';
+            button.style.borderColor = 'var(--accent-2)';
+            button.style.color = '#ffffff';
+            
+            setTimeout(() => {
+              button.textContent = originalText;
+              button.style.background = origBg;
+              button.style.borderColor = origBorder;
+              button.style.color = origColor;
+            }, 2000);
+          }).catch(err => {
+            console.error('Không thể sao chép mã nguồn: ', err);
+          });
+        });
+      });
+    </script>
+
+    <!-- Script ScrollSpy cho Sidebar điều hướng tự động -->
+    <script>
+      window.addEventListener('DOMContentLoaded', () => {
+        const observerOptions = {
+          root: null,
+          rootMargin: '-15% 0px -75% 0px',
+          threshold: 0
+        };
+
+        const observer = new IntersectionObserver(entries => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              const id = entry.target.getAttribute('id');
+              const navLink = document.querySelector(`#sidebar-nav a[href="#${id}"]`);
+              if (!navLink) return;
+
+              document.querySelectorAll('#sidebar-nav a').forEach(link => {
+                link.classList.remove('active');
+              });
+              navLink.classList.add('active');
+            }
+          });
+        }, observerOptions);
+
+        document.querySelectorAll('.content-area .section').forEach(section => {
+          observer.observe(section);
+        });
+      });
+    </script>
+  </body>
+</html>
