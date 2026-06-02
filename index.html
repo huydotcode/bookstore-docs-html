@@ -485,6 +485,7 @@ docker compose up --build -d</pre>
               .qa-badge.tech { background: #10b981; }
               .qa-badge.ops { background: #d97706; }
               .qa-badge.crit { background: #ef4444; }
+              .qa-badge.ai { background: #8b5cf6; }
             </style>
 
             <!-- Group 1: Architecture -->
@@ -645,7 +646,19 @@ docker compose up --build -d</pre>
                   <ul>
                     <li><strong>Đánh đổi tính nhất quán tức thời (Immediate Consistency):</strong> Chấp nhận nhất quán sau (Eventual Consistency) &rarr; Code Saga và các luồng rollback phức tạp hơn Monolith rất nhiều.</li>
                     <li><strong>Độ trễ mạng (Network Latency):</strong> Giao tiếp chéo qua các service thông qua Feign/RabbitMQ tốn thời gian hơn gọi trong bộ nhớ &rarr; Tối ưu bằng cách cache Redis giỏ hàng và thiết lập cơ chế nạp sẵn dữ liệu (Eager Loading).</li>
-                    <li><strong>Single Point of Failure (SPOF) tại API Gateway:</strong> Nếu API Gateway sập, hệ thống tê liệt hoàn toàn &rarr; Khắc phục bằng cách chạy song song nhiều Gateway đằng sau Load Balancer (Nginx/AWS ALB).</li>
+                  </ul>
+                </div>
+              </details>
+
+              <!-- Q8a (New: 4i) -->
+              <details class="qa-card">
+                <summary class="qa-summary"><span style="display: flex; align-items: center; gap: var(--space-1);"><span class="qa-badge arch">Arch</span> Câu 4i: Tại sao lựa chọn RabbitMQ làm Message Broker thay vì Apache Kafka?</span></summary>
+                <div class="qa-content">
+                  <p>Chúng em chọn RabbitMQ thay vì Kafka vì các đặc tính kỹ thuật phù hợp hơn với nghiệp vụ của hệ thống:</p>
+                  <ul>
+                    <li><strong>Mô hình Định tuyến tin nhắn (Routing):</strong> RabbitMQ hỗ trợ định tuyến tin nhắn phức tạp thông qua Topic Exchange và Routing Key. Điều này cực kỳ phù hợp cho việc phân phát các lệnh (Commands) và sự kiện (Events) của Saga đến đúng hàng đợi của các service liên quan.</li>
+                    <li><strong>Nhẹ nhàng và dễ vận hành:</strong> RabbitMQ nhẹ hơn, tốn ít tài nguyên bộ nhớ hơn và thiết lập đơn giản hơn nhiều so với Apache Kafka (đòi hỏi ZooKeeper/KRaft và cấu hình phân vùng Cluster phức tạp).</li>
+                    <li><strong>Mục đích sử dụng:</strong> Hệ thống cần xử lý các giao dịch tài chính/đặt hàng tuần tự, tin cậy thông qua hàng đợi tin nhắn (Message Queue). Kafka tối ưu hơn cho xử lý luồng dữ liệu lớn (Log/Event Streaming), không thực sự cần thiết cho quy mô của Bookstore.</li>
                   </ul>
                 </div>
               </details>
@@ -678,12 +691,17 @@ docker compose up --build -d</pre>
               <details class="qa-card">
                 <summary class="qa-summary">Câu 5b: Mô hình CQRS (Command Query Responsibility Segregation) áp dụng ra sao?</summary>
                 <div class="qa-content">
-                  <p>Hệ thống tách biệt nhánh đọc/ghi ở mức dữ liệu được tối ưu hóa:</p>
-                  <ul>
-                    <li><strong>Nhánh Ghi (Command):</strong> Đảm bảo tính toàn vẹn nghiệp vụ ACID bằng cách ghi trực tiếp xuống các bảng quan hệ của MySQL Databases (như tạo đơn hàng, cập nhật sách).</li>
-                    <li><strong>Nhánh Đọc (Query):</strong> Tối ưu hóa tốc độ đọc bằng cách nạp dữ liệu sang Redis Cache (cho giỏ hàng) và Qdrant Vector DB (cho tìm kiếm nhanh).</li>
-                    <li><strong>Cơ chế đồng bộ:</strong> Khi có thay đổi dữ liệu (Admin sửa sách), hệ thống kích hoạt bất đồng bộ cập nhật sang Vector DB Qdrant và làm mới bộ đệm.</li>
-                  </ul>
+                  <p>Hệ thống áp dụng mô hình CQRS (tách biệt trách nhiệm đọc và ghi) ở mức độ cơ bản (tầng lưu trữ dữ liệu) để tối ưu hiệu năng:</p>
+                  <ol style="padding-left: var(--space-3); line-height: 1.8;">
+                    <li><strong>Nhánh Ghi (Command - CUD):</strong> Tối ưu cho logic nghiệp vụ và tính toàn vẹn dữ liệu. Các tác vụ thêm, sửa, xóa (như tạo đơn hàng, cập nhật sách, đăng ký tài khoản) ghi trực tiếp xuống các bảng quan hệ đã được chuẩn hóa (Normalized) trong cơ sở dữ liệu quan hệ RDBMS (MySQL) để bảo đảm các ràng buộc và tính toàn vẹn giao dịch (ACID). Ở quy mô lớn hơn, nhánh này sẽ ghi vào Master DB.</li>
+                    <li><strong>Nhánh Đọc (Query - R):</strong> Tối ưu tối đa cho tốc độ hiển thị giao diện người dùng. Nhánh đọc sẽ truy xuất trực tiếp dữ liệu từ các vùng lưu trữ dạng phi cấu trúc hoặc đã được tính toán sẵn (Denormalized) như <strong>Redis Cache</strong> (đọc giỏ hàng siêu tốc) và <strong>Qdrant Vector Database</strong> (đọc thông tin vector hóa của sách phục vụ tìm kiếm ngữ nghĩa nhanh chóng) mà không cần thực hiện các câu lệnh SQL JOIN nhiều bảng phức tạp. Ở quy mô lớn hơn, nhánh này sẽ đọc từ các bản sao Slave DB.</li>
+                    <li><strong>Cơ chế đồng bộ:</strong> 
+                      <ul>
+                        <li>Nếu sử dụng Master/Slave (cùng SQL): Dữ liệu được đồng bộ tự động qua cơ chế Replication nội bộ của cơ sở dữ liệu.</li>
+                        <li>Nếu sử dụng No-SQL hoặc Cache: Dữ liệu được đồng bộ bất đồng bộ thông qua Message Broker (RabbitMQ). Ví dụ, khi thông tin sách thay đổi, <code>book-service</code> ghi nhận vào MySQL đồng thời phát tin nhắn qua RabbitMQ để kích hoạt job cập nhật Vector Embedding trên Qdrant và invalidate cache Redis.</li>
+                      </ul>
+                      <em>Lưu ý:</em> Quá trình đồng bộ bất đồng bộ luôn có độ trễ nhỏ (Network Lag), dẫn đến hiện tượng <strong>Nhất quán sau một khoảng thời gian (Eventual Consistency)</strong>, hoàn toàn phù hợp và được chấp nhận trong nghiệp vụ thương mại điện tử.</li>
+                  </ol>
                 </div>
               </details>
 
@@ -743,6 +761,19 @@ docker compose up --build -d</pre>
                   <ul>
                     <li><strong>Môi trường Dev:</strong> Sử dụng cấu hình tự động ánh xạ Hibernate <code>spring.jpa.hibernate.ddl-auto: update</code> giúp phát triển nhanh, liên tục sửa đổi schema không cần tạo script thủ công.</li>
                     <li><strong>Định hướng Production:</strong> Tích hợp công cụ <strong>Flyway</strong> chạy trực tiếp trong CI/CD pipeline. Mọi thay đổi DB được viết thành script SQL đánh số phiên bản rõ ràng (như <code>V1__init.sql</code>, <code>V2__add_index.sql</code>) để nâng cấp tuần tự an toàn, tránh mất mát dữ liệu.</li>
+                  </ul>
+                </div>
+              </details>
+
+              <!-- Q13a (New: 5f) -->
+              <details class="qa-card">
+                <summary class="qa-summary"><span style="display: flex; align-items: center; gap: var(--space-1);"><span class="qa-badge crit">Crit</span> Câu 5f: Làm thế nào đảm bảo độ tin cậy giao dịch khi Orchestrator sập đột ngột (Transactional Outbox)?</span></summary>
+                <div class="qa-content">
+                  <p>Nhóm sử dụng mẫu thiết kế <strong>Transactional Outbox Pattern</strong> để đảm bảo tin nhắn không bao giờ bị thất lạc:</p>
+                  <ul>
+                    <li>Khi Saga Orchestrator thay đổi trạng thái Saga, thay vì gửi tin nhắn đi RabbitMQ trực tiếp (có nguy cơ sập giữa chừng), hệ thống sẽ lưu thông điệp cần phát vào bảng <code>outbox_table</code> nằm ở cùng database với Saga và chạy trong cùng một <strong>Database Transaction</strong>.</li>
+                    <li>Nếu transaction thành công, cả dữ liệu trạng thái Saga và thông điệp gửi đi đều được lưu trữ bền vững. Nếu lỗi, toàn bộ được rollback.</li>
+                    <li>Một dịch vụ nền (Worker/Polling scheduler) sẽ định kỳ quét bảng outbox này, gửi tin nhắn đi qua RabbitMQ và đánh dấu là đã gửi thành công, đảm bảo phân phát tin nhắn thành công ít nhất một lần (At-least-once delivery).</li>
                   </ul>
                 </div>
               </details>
@@ -872,6 +903,31 @@ docker compose up --build -d</pre>
                     <li><strong>Tránh lỗi Breaking Changes:</strong> Thư viện Spring AI hiện tại đang trong giai đoạn phát triển rất nhanh, cú pháp thay đổi liên tục qua từng version nhỏ, gây ra rủi ro mất tương thích ngược (breaking changes) rất cao cho mã nguồn hệ thống.</li>
                     <li><strong>Kiểm soát chi tiết cấu trúc gửi đi (Payload Control):</strong> Tự viết REST client giúp chúng em kiểm soát 100% cấu trúc JSON, dễ dàng tùy biến cấu hình an toàn, nhiệt độ sinh từ và đặc biệt là tích hợp tính năng **Tool/Function Calling** của Gemini mượt mà hơn nhiều so với việc bị giới hạn bởi lớp bọc (wrapper layer) của Spring AI.</li>
                   </ol>
+                </div>
+              </details>
+
+              <!-- Q22 (New: 6e) -->
+              <details class="qa-card">
+                <summary class="qa-summary"><span style="display: flex; align-items: center; gap: var(--space-1);"><span class="qa-badge ops">Ops</span> Câu 5: Nhóm quản lý và bảo mật các thông tin nhạy cảm (API Keys, Database Passwords) như thế nào?</span></summary>
+                <div class="qa-content">
+                  <p>Hệ thống Bookstore tuyệt đối không lưu trữ cứng (hardcode) thông tin nhạy cảm trong mã nguồn nhằm tuân thủ quy chuẩn bảo mật:</p>
+                  <ul>
+                    <li><strong>Môi trường Local:</strong> Các biến nhạy cảm được cấu hình tập trung tại tệp tin <code>.env</code> trong thư mục [Plan-And-Document](file:///d:/Projects/book-store-ktpm/source/Plan-And-Document) và được đưa vào <code>.gitignore</code> để ngăn chặn việc rò rỉ mã nguồn lên GitHub.</li>
+                    <li><strong>Môi trường Production (Deploy K8s):</strong> Các API keys (như Gemini, ZaloPay, MoMo, VNPay) và thông tin đăng nhập database được lưu trữ dưới dạng <strong>Kubernetes Secrets</strong> (hoặc AWS Secrets Manager). Khi container khởi động, các secrets này được nạp động làm biến môi trường (Environment Variables) giúp bảo mật tối đa.</li>
+                  </ul>
+                </div>
+              </details>
+
+              <!-- Q23 (New: 6f) -->
+              <details class="qa-card">
+                <summary class="qa-summary"><span style="display: flex; align-items: center; gap: var(--space-1);"><span class="qa-badge ai">AI</span> Câu 6: Làm thế nào để giải quyết tình trạng "ảo tưởng" (Hallucination) của AI Chatbot khi tư vấn?</span></summary>
+                <div class="qa-content">
+                  <p>Để ngăn chặn chatbot AI trả lời sai lệch thông tin không có thật, nhóm áp dụng cơ chế <strong>Tool Calling (Function Calling)</strong> của Google Gemini kết hợp RAG:</p>
+                  <ul>
+                    <li>Chúng em định nghĩa cho mô hình LLM một tập các API nội bộ (như kiểm tra kho sách, tra cứu tình trạng đơn hàng).</li>
+                    <li>Khi người dùng hỏi thông tin cụ thể (ví dụ: <em>"Đơn hàng của tôi đang ở đâu?"</em>), Gemini không tự đoán mà trả về lệnh yêu cầu hệ thống gọi hàm <code>getOrderStatus(orderId)</code>.</li>
+                    <li>Dịch vụ <code>ai-service</code> sẽ gọi REST qua OpenFeign lấy dữ liệu thật từ <code>order-service</code>, trả ngữ cảnh chuẩn xác về cho Gemini. Từ đó, Gemini tổng hợp câu trả lời chuẩn xác dựa trên <strong>sự thật dữ liệu của hệ thống</strong>.</li>
+                  </ul>
                 </div>
               </details>
             </div>
