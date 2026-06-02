@@ -1030,9 +1030,11 @@
             <div class="grid-2">
               <!-- Order Service Patterns -->
               <div class="card" style="margin-bottom: 0;">
-                <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2);">
-                  <span class="badge" style="background-color: var(--accent-1); color: var(--surface); padding: 4px 8px; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: bold;">Order Service</span>
-                  <h3 style="margin: 0; font-family: 'Lora', serif; font-size: 1.2rem; color: var(--accent-2);">Mẫu thiết kế tại Order Service</h3>
+                <div style="margin-bottom: var(--space-3);">
+                  <div style="margin-bottom: var(--space-1);">
+                    <span class="qa-badge arch" style="margin: 0;">Order Service</span>
+                  </div>
+                  <h3 style="margin: 0; font-family: 'Lora', serif; font-size: 1.25rem; color: var(--accent-2); line-height: 1.3;">Mẫu thiết kế tại Order Service</h3>
                 </div>
                 <p style="font-size: 0.9rem; margin-bottom: var(--space-3); color: var(--ink);">
                   Dịch vụ quản lý đơn hàng tập trung vào xử lý trạng thái giao dịch phân tán và ánh xạ mô hình dữ liệu.
@@ -1071,9 +1073,11 @@
 
               <!-- Payment Service Patterns -->
               <div class="card" style="margin-bottom: 0;">
-                <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2);">
-                  <span class="badge" style="background-color: #d97706; color: var(--surface); padding: 4px 8px; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: bold;">Payment Service</span>
-                  <h3 style="margin: 0; font-family: 'Lora', serif; font-size: 1.2rem; color: var(--accent-2);">Mẫu thiết kế tại Payment Service</h3>
+                <div style="margin-bottom: var(--space-3);">
+                  <div style="margin-bottom: var(--space-1);">
+                    <span class="qa-badge ops" style="margin: 0;">Payment Service</span>
+                  </div>
+                  <h3 style="margin: 0; font-family: 'Lora', serif; font-size: 1.25rem; color: var(--accent-2); line-height: 1.3;">Mẫu thiết kế tại Payment Service</h3>
                 </div>
                 <p style="font-size: 0.9rem; margin-bottom: var(--space-3); color: var(--ink);">
                   Dịch vụ thanh toán tập trung vào tính đa hình của các cổng thanh toán bên thứ ba và xử lý bất đồng bộ.
@@ -1081,16 +1085,16 @@
 
                 <div style="display: flex; flex-direction: column; gap: var(--space-2);">
                   <div style="background: var(--surface-2); padding: 12px; border-radius: var(--radius-sm); border-left: 3px solid #d97706;">
-                    <strong style="font-size: 0.9rem; color: var(--ink);">Strategy Pattern (Mẫu thiết kế Chiến lược)</strong>
+                    <strong style="font-size: 0.9rem; color: var(--ink);">Strategy Pattern (Mẫu thiết kế Chiến lược - Behavioral Group)</strong>
                     <p style="font-size: 0.85rem; margin-top: 4px; color: var(--ink); line-height: 1.5;">
-                      Đóng gói các giải pháp thanh toán của bên thứ ba (VNPay, MoMo, ZaloPay) vào các lớp dịch vụ độc lập triển khai các giao diện tương ứng (<code>VNPayService</code>, <code>MoMoService</code>, <code>ZaloPayService</code>). Giúp dễ dàng thay thế, cập nhật hoặc sửa lỗi logic của một cổng mà không ảnh hưởng tới các cổng khác.
+                      Mặc dù không sử dụng một Interface đa hình duy nhất cho cả 3 cổng thanh toán (do cấu trúc Request/Response và tham số Callback của MoMo, VNPay, ZaloPay khác biệt hoàn toàn), hệ thống áp dụng triết lý <strong>Strategy Pattern</strong> bằng cách cô lập thuật toán tạo liên kết thanh toán, ký chữ ký điện tử và đối chiếu chữ ký callback của từng nhà cung cấp vào các lớp độc lập (<code>VNPayServiceImpl</code>, <code>MoMoServiceImpl</code>, <code>ZaloPayServiceImpl</code>). Việc này giúp cô lập hoàn toàn logic tích hợp riêng biệt của từng cổng, tuân thủ nguyên lý Open/Closed (dễ dàng bổ sung cổng mới như Apple Pay/ShopeePay trong tương lai mà không ảnh hưởng đến các cổng hiện tại).
                     </p>
                   </div>
 
                   <div style="background: var(--surface-2); padding: 12px; border-radius: var(--radius-sm); border-left: 3px solid #d97706;">
-                    <strong style="font-size: 0.9rem; color: var(--ink);">Factory Method / Selector</strong>
+                    <strong style="font-size: 0.9rem; color: var(--ink);">Simple Factory Pattern (Mẫu thiết kế Nhà máy đơn giản - Creational Group)</strong>
                     <p style="font-size: 0.85rem; margin-top: 4px; color: var(--ink); line-height: 1.5;">
-                      Phương thức <code>createProviderPayment</code> trong <code>PaymentCommandConsumer</code> đóng vai trò như một Factory Method động. Nó phân tích phương thức thanh toán trong <code>CreatePaymentCommand</code> để định tuyến và gọi đúng Strategy thanh toán tương ứng (VNPay, MoMo, ZaloPay).
+                      Phương thức <code>createProviderPayment</code> trong <code>PaymentCommandConsumer</code> đóng vai trò là một <strong>Simple Factory / Dispatcher</strong>. Thay vì để client tự quyết định và khởi tạo các dịch vụ cụ thể, nó sử dụng cú pháp <code>switch-expression</code> để nhận diện chuỗi String <code>paymentMethod</code> từ Saga Command, từ đó định tuyến cuộc gọi đến đúng Strategy thanh toán tương ứng và trực tiếp trả về đối tượng kết quả <code>CreatePaymentResponse</code> thống nhất.
                     </p>
                   </div>
 
