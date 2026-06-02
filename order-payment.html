@@ -271,6 +271,9 @@
                 <div class="callout warning" style="margin-bottom: 0; font-size: 0.92rem;">
                   <strong>ZaloPay Redirect Checksum:</strong> Với cổng ZaloPay, khi xử lý redirect trả về phía client, <code>payment-service</code> thực hiện kiểm tra mã checksum nghiêm ngặt từ các tham số trả về bao gồm <code>appid</code>, <code>apptransid</code>, <code>pmcid</code>, <code>bankcode</code>, <code>amount</code>, <code>discountamount</code>, <code>status</code> nối với nhau bằng ký tự <code>|</code> và băm HMAC-SHA256 bằng khóa bí mật <code>key2</code> để chống gian lận tham số giao dịch.
                 </div>
+                <div class="callout danger" style="margin-top: var(--space-2); margin-bottom: 0; font-size: 0.9rem;">
+                  <strong>Cảnh báo Lỗ hổng (Bypass Warning):</strong> Trong implementation hiện tại tại <code>PaymentController.isValidZaloPayRedirect(...)</code>, nếu giá trị <code>checksum</code> gửi lên trống hoặc null, hàm kiểm tra trả về <code>true</code> trực tiếp. Điều này cho phép kẻ gian giả mạo thanh toán thành công chỉ bằng cách xóa tham số <code>checksum</code> khỏi URL redirect. Cần cập nhật code để từ chối các checksum trống.
+                </div>
               </div>
 
               <div class="card">
@@ -768,6 +771,9 @@
                   </tbody>
                 </table>
               </div>
+              <div class="callout danger" style="margin-top: var(--space-3); font-size: 0.92rem;">
+                <strong>Cảnh báo Bảo mật (Security Bypass Warning):</strong> Trong mã nguồn xử lý phương thức <code>isValidZaloPayRedirect</code> tại [PaymentController.java](file:///d:/Projects/book-store-ktpm/source/bookstore-payment-service/src/main/java/com/notfound/paymentservice/controller/PaymentController.java#L129-L131), việc trả về <code>true</code> khi tham số <code>checksum</code> bị khuyết hoặc rỗng (<code>checksum == null || checksum.isBlank()</code>) tạo ra lỗ hổng bỏ qua xác thực phía máy chủ (Checksum Bypass). Khách hàng hoặc kẻ tấn công có thể cố tình xóa tham số <code>checksum</code> trên URL redirect để ép hệ thống chấp nhận thông tin giao dịch giả mạo từ client. Cần sửa đổi logic để <strong>tuyệt đối từ chối</strong> (trả về <code>false</code>) khi tham số checksum trống.
+              </div>
             </div>
           </section>
 
@@ -817,41 +823,90 @@
 
               <!-- Message Queue Card -->
               <div class="card">
-                <p class="kicker">Hàng đợi RabbitMQ & Định tuyến Sự kiện</p>
+                <p class="kicker">Hàng đợi RabbitMQ &amp; Định tuyến Sự kiện (Saga exchanges)</p>
                 <div class="table-responsive" style="box-shadow: none;">
-                  <table class="table-tech" style="font-size: 0.85rem;">
+                  <table class="table-tech" style="font-size: 0.82rem;">
                     <thead>
                       <tr>
                         <th>Exchange chuẩn</th>
                         <th>Routing Key chính</th>
-                        <th>Dịch vụ đích / Chức năng</th>
+                        <th>Mô tả chức năng luồng Saga</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
-                        <td><code>bookstore.commands</code></td>
+                        <td rowspan="10" style="vertical-align: middle; font-weight: bold; background: var(--bg-alpha);"><code>bookstore.commands</code></td>
                         <td><code>order.create.command</code></td>
-                        <td><code>order-service</code> tạo đơn nháp.</td>
+                        <td>Tạo đơn hàng nháp ở trạng thái <code>PENDING</code>.</td>
                       </tr>
                       <tr>
-                        <td><code>bookstore.commands</code></td>
-                        <td><code>payment.create.command</code></td>
-                        <td><code>payment-service</code> tạo link thanh toán.</td>
+                        <td><code>order.confirm.command</code></td>
+                        <td>Xác nhận đơn hàng sang trạng thái <code>CONFIRMED</code>.</td>
                       </tr>
                       <tr>
-                        <td><code>bookstore.events</code></td>
-                        <td><code>payment.completed</code></td>
-                        <td>Cổng thanh toán báo thành công &rarr; Saga.</td>
+                        <td><code>order.cancel.command</code></td>
+                        <td>Bù trừ: Hủy đơn hàng sang trạng thái <code>CANCELLED</code>.</td>
                       </tr>
                       <tr>
-                        <td><code>bookstore.commands</code></td>
-                        <td><code>payment.refund.command</code></td>
-                        <td>Bù trừ: Hoàn trả tiền cho khách hàng.</td>
+                        <td><code>book.stock.reserve.command</code></td>
+                        <td>Giữ số lượng sách tạm thời trong kho (Reservation).</td>
                       </tr>
                       <tr>
-                        <td><code>bookstore.commands</code></td>
+                        <td><code>book.stock.confirm.command</code></td>
+                        <td>Xác nhận trừ kho chính thức (Commit).</td>
+                      </tr>
+                      <tr>
                         <td><code>book.stock.release.command</code></td>
-                        <td>Bù trừ: Trả lại sách vào kho.</td>
+                        <td>Bù trừ: Nhả tồn kho sách đã giữ (Rollback).</td>
+                      </tr>
+                      <tr>
+                        <td><code>promotion.reserve.command</code></td>
+                        <td>Giữ tạm lượt sử dụng mã voucher giảm giá.</td>
+                      </tr>
+                      <tr>
+                        <td><code>promotion.confirm.command</code></td>
+                        <td>Xác nhận khấu trừ voucher giảm giá chính thức.</td>
+                      </tr>
+                      <tr>
+                        <td><code>promotion.release.command</code></td>
+                        <td>Bù trừ: Trả lại lượt sử dụng voucher (Rollback).</td>
+                      </tr>
+                      <tr>
+                        <td><code>payment.refund.command</code></td>
+                        <td>Bù trừ: Gọi hoàn tiền giao dịch qua cổng online.</td>
+                      </tr>
+                      <tr>
+                        <td rowspan="8" style="vertical-align: middle; font-weight: bold; background: var(--bg-alpha);"><code>bookstore.events</code></td>
+                        <td><code>order.created</code> / <code>order.failed</code></td>
+                        <td>Kết quả tạo đơn nháp gửi về Saga Orchestrator.</td>
+                      </tr>
+                      <tr>
+                        <td><code>book.stock.reserved</code> / <code>book.stock.failed</code></td>
+                        <td>Kết quả giữ kho gửi về Saga Orchestrator.</td>
+                      </tr>
+                      <tr>
+                        <td><code>promotion.reserved</code> / <code>promotion.failed</code></td>
+                        <td>Kết quả giữ voucher gửi về Saga Orchestrator.</td>
+                      </tr>
+                      <tr>
+                        <td><code>payment.created</code> / <code>payment.completed</code> / <code>payment.failed</code></td>
+                        <td>Kết quả khởi tạo/thanh toán gửi về Saga Orchestrator.</td>
+                      </tr>
+                      <tr>
+                        <td><code>shipping.created</code> / <code>shipping.failed</code></td>
+                        <td>Kết quả tạo vận đơn GHN gửi về Saga Orchestrator.</td>
+                      </tr>
+                      <tr>
+                        <td><code>cart.cleared</code></td>
+                        <td>Kết quả xóa giỏ hàng gửi về Saga Orchestrator.</td>
+                      </tr>
+                      <tr>
+                        <td><code>checkout.completed</code> / <code>checkout.failed</code></td>
+                        <td>Kết quả kết thúc Saga gửi sang hệ thống notification.</td>
+                      </tr>
+                      <tr>
+                        <td><code>order.cancelled</code></td>
+                        <td>Đơn hàng bị hủy gửi sang hệ thống notification.</td>
                       </tr>
                     </tbody>
                   </table>

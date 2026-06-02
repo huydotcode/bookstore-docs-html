@@ -46,6 +46,7 @@
               <li><a href="#port-convention">Cấu hình Ports & DB</a></li>
               <li><a href="#feature-index">Danh mục Chức năng</a></li>
               <li><a href="#design-system">Quy chuẩn Thiết kế</a></li>
+              <li><a href="#dev-guide">Quy trình &amp; Cấu trúc Dev</a></li>
               <li><a href="#presentation-qa">Hỏi đáp Phản biện</a></li>
             </ul>
           </nav>
@@ -170,7 +171,7 @@
                     <tr><td><code>api-gateway</code></td><td>8080</td><td>8080</td><td>-</td><td>Định tuyến API, kiểm tra Token JWT.</td></tr>
                     <tr><td><code>user-service</code></td><td>8080</td><td>8081</td><td><code>bookstore_user</code></td><td>Quản lý người dùng, phân quyền.</td></tr>
                     <tr><td><code>book-service</code></td><td>8080</td><td>8082</td><td><code>bookstore_book</code></td><td>Quản lý danh mục sách, số lượng kho.</td></tr>
-                    <tr><td><code>cart-service</code></td><td>8080</td><td>8083</td><td>- (Redis)</td><td>Quản lý giỏ hàng tạm thời trên Redis.</td></tr>
+                    <tr><td><code>cart-service</code></td><td>8080</td><td>8083</td><td><code>bookstore_cart</code> &amp; Redis</td><td>Quản lý giỏ hàng tạm thời trên Redis và MySQL.</td></tr>
                     <tr><td><code>order-service</code></td><td>8080</td><td>8084</td><td><code>bookstore_order</code></td><td>Quản lý đơn hàng và trạng thái đơn hàng.</td></tr>
                     <tr><td><code>payment-service</code></td><td>8080</td><td>8085</td><td><code>bookstore_payment</code></td><td>Giao tiếp cổng thanh toán trực tuyến.</td></tr>
                     <tr><td><code>promotion-service</code></td><td>8080</td><td>8086</td><td><code>bookstore_promotion_db</code></td><td>Quản lý mã giảm giá, chiết khấu.</td></tr>
@@ -249,7 +250,145 @@
             </div>
           </section>
 
-          <!-- Section 6: Presentation Q&A -->
+          <!-- Section 6: Standard Dev Guide -->
+          <section class="section" id="dev-guide" style="padding: var(--space-4) 0; border-top: 1px solid var(--line);">
+            <h2 class="section-title anchor-header">
+              <a href="#dev-guide" class="anchor-link">#</a>
+              Quy trình &amp; Cấu trúc Dev
+            </h2>
+            <p class="lead" style="margin-bottom: var(--space-4);">
+              Quy chuẩn cấu trúc thư mục, quy trình phát triển local, đóng gói image và kiểm thử tích hợp hệ thống cho các microservices.
+            </p>
+
+            <div class="grid-2" style="margin-bottom: var(--space-4);">
+              <!-- Card: Structure -->
+              <div class="card">
+                <p class="kicker">1. Cấu trúc Thư mục Chuẩn (Directory Structure)</p>
+                <p style="font-size: 0.92rem; margin-bottom: var(--space-2);">
+                  Tất cả các dịch vụ (microservices) bắt buộc tuân thủ cấu trúc package đồng nhất dưới root package <code>com.notfound.&lt;serviceName&gt;</code>:
+                </p>
+                <div class="code-wrapper" style="margin-bottom: 0;">
+                  <div class="code-header">
+                    <span>Cấu trúc Package</span>
+                  </div>
+                  <pre class="code-block" style="font-size: 0.82rem; line-height: 1.45;">service/
+├── src/
+│   ├── main/
+│   │   ├── java/com/notfound/__serviceName__/
+│   │   │   ├── client/        # OpenFeign Clients
+│   │   │   ├── config/        # Cấu hình hệ thống
+│   │   │   ├── controller/    # REST Endpoints
+│   │   │   ├── exception/     # Global Exception Handling
+│   │   │   ├── listener/      # Message Listeners / Events
+│   │   │   ├── memory/        # Cache &amp; dữ liệu tạm thời
+│   │   │   ├── model/         # Entity, DTO, Mapper, Enum
+│   │   │   ├── repository/    # Spring Data JPA Repositories
+│   │   │   ├── security/      # Cấu hình bảo mật &amp; phân quyền
+│   │   │   ├── service/       # Business logic (interface &amp; impl)
+│   │   │   ├── util/          # Lớp tiện ích bổ trợ
+│   │   │   └── messaging/     # RabbitMQ/MQ Producers &amp; Consumers
+│   │   └── resources/
+│   │        ├── application-dev.yml
+│   │        ├── application-prod.yml
+│   │        └── application.yml
+│   └── test/                  # Unit &amp; Integration Tests
+└── pom.xml</pre>
+                </div>
+              </div>
+
+              <!-- Card: Local Workflow & Build -->
+              <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                  <p class="kicker">2. Quy trình Phát triển tại Local (Local Dev)</p>
+                  <p style="font-size: 0.92rem; margin-bottom: var(--space-2);">
+                    Phát triển tại máy cá nhân thực hiện qua các bước:
+                  </p>
+                  <ol style="font-size: 0.9rem; padding-left: var(--space-3); margin-bottom: var(--space-3); line-height: 1.7;">
+                    <li>Khởi động Docker Desktop trên máy tính cá nhân.</li>
+                    <li>Truy cập thư mục của service tương ứng trên terminal.</li>
+                    <li>Khởi động cơ sở dữ liệu và hạ tầng đi kèm:
+                      <div class="code-wrapper" style="margin: var(--space-1) 0;">
+                        <pre class="code-block" style="font-size: 0.8rem; padding: 6px 10px;">docker compose up -d</pre>
+                      </div>
+                    </li>
+                    <li><strong>Hot Reload:</strong> Sau khi chỉnh sửa code, chạy lệnh sau để container tự biên dịch và áp dụng mà không cần khởi động lại:
+                      <div class="code-wrapper" style="margin: var(--space-1) 0;">
+                        <pre class="code-block" style="font-size: 0.8rem; padding: 6px 10px;">./mvnw compile</pre>
+                      </div>
+                    </li>
+                  </ol>
+                </div>
+                <div>
+                  <p class="kicker">3. Đóng gói &amp; Đẩy Image (Build &amp; Push)</p>
+                  <p style="font-size: 0.92rem; margin-bottom: var(--space-2);">
+                    Khi hoàn thành tính năng, tiến hành build và push image lên Docker Hub:
+                  </p>
+                  <div class="code-wrapper" style="margin-bottom: 0;">
+                    <pre class="code-block" style="font-size: 0.8rem; padding: 6px 10px;">./mvnw clean package
+./push.ps1 v1.0.0</pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <!-- Card: Integration Testing -->
+              <div class="card">
+                <p class="kicker">4. Kiểm thử Tích hợp (Integration Testing)</p>
+                <p style="font-size: 0.92rem; margin-bottom: var(--space-2);">
+                  Quy trình chạy thử tích hợp service với toàn bộ hệ thống microservices:
+                </p>
+                <ol style="font-size: 0.9rem; padding-left: var(--space-3); margin-bottom: var(--space-3); line-height: 1.7;">
+                  <li>Khởi động hạ tầng Docker Compose chung tại thư mục gốc:
+                    <div class="code-wrapper" style="margin: var(--space-1) 0;">
+                      <pre class="code-block" style="font-size: 0.8rem; padding: 6px 10px;">docker compose -f docker-compose.dev.yml up -d</pre>
+                    </div>
+                  </li>
+                  <li>Build và chạy container mới của service vừa sửa đổi:
+                    <div class="code-wrapper" style="margin: var(--space-1) 0;">
+                      <pre class="code-block" style="font-size: 0.8rem; padding: 6px 10px;">./mvnw clean package
+docker compose up --build -d</pre>
+                    </div>
+                  </li>
+                  <li>Kiểm tra trạng thái các container để đảm bảo hoạt động ổn định.</li>
+                </ol>
+                <div class="callout warning" style="margin-bottom: 0; font-size: 0.88rem;">
+                  <strong>Quy tắc Port:</strong> Tuyệt đối <strong>KHÔNG</strong> tự ý thay đổi cấu hình các cổng mạng (ports) trong các tệp <code>docker-compose.dev.yml</code>, <code>docker-compose.prod.yml</code> và <code>docker-compose.yml</code> để tránh xung đột kết nối giữa các microservices.
+                </div>
+              </div>
+
+              <!-- Card: Database Config Template -->
+              <div class="card">
+                <p class="kicker">Phụ lục: Mẫu cấu hình Docker Compose Database (MySQL)</p>
+                <p style="font-size: 0.92rem; margin-bottom: var(--space-2);">
+                  Mẫu định nghĩa container database MySQL chuẩn cho các microservice phát triển sau (ví dụ: <code>book-db</code>):
+                </p>
+                <div class="code-wrapper" style="margin-bottom: 0;">
+                  <div class="code-header">
+                    <span>docker-compose snippet</span>
+                  </div>
+                  <pre class="code-block" style="font-size: 0.82rem; line-height: 1.45;">book-db:
+  image: mysql:8.0
+  container_name: book-db
+  restart: always
+  environment:
+    MYSQL_DATABASE: bookstore_book
+    MYSQL_USER: bookstore
+    MYSQL_PASSWORD: bookstore
+    MYSQL_ROOT_PASSWORD: root
+  healthcheck:
+    test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-proot"]
+    interval: 5s
+    timeout: 5s
+    retries: 20
+  networks:
+    - bookstore-network</pre>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Section 7: Presentation Q&A -->
           <section class="section" id="presentation-qa" style="padding: var(--space-4) 0; border-top: 1px solid var(--line);">
             <h2 class="section-title anchor-header">
               <a href="#presentation-qa" class="anchor-link">#</a>
