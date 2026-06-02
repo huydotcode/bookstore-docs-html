@@ -13,6 +13,95 @@
     <meta name="ai-context" content="order-payment-spec" />
     <meta name="ai-version" content="1.5" />
     <link rel="stylesheet" href="styles.css?v=1.5" />
+    <style>
+      .qa-group {
+        margin-bottom: var(--space-4);
+      }
+      .qa-group-title {
+        font-family: 'Lora', serif;
+        font-size: 1.25rem;
+        color: var(--accent-2);
+        margin-bottom: var(--space-3);
+        padding-bottom: var(--space-1);
+        border-bottom: 2px solid var(--line);
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
+      .qa-card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        margin-bottom: var(--space-2);
+        padding: var(--space-2) var(--space-3);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
+        transition: all 0.22s ease;
+      }
+      .qa-card[open] {
+        border-color: var(--accent-2);
+        box-shadow: var(--shadow);
+      }
+      .qa-summary {
+        font-weight: 600;
+        cursor: pointer;
+        padding: var(--space-1) 0;
+        outline: none;
+        user-select: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.96rem;
+        color: var(--ink);
+      }
+      .qa-summary::-webkit-details-marker {
+        display: none;
+      }
+      .qa-summary::after {
+        content: "+";
+        font-size: 1.2rem;
+        color: var(--accent-2);
+        font-weight: bold;
+        transition: transform 0.2s ease;
+      }
+      .qa-card[open] .qa-summary::after {
+        content: "−";
+        transform: rotate(180deg);
+      }
+      .qa-content {
+        padding-top: var(--space-2);
+        border-top: 1px dashed var(--line);
+        margin-top: var(--space-1);
+        font-size: 0.94rem;
+        line-height: 1.7;
+        color: var(--ink);
+      }
+      .qa-content p {
+        margin-bottom: var(--space-2);
+      }
+      .qa-content ol, .qa-content ul {
+        padding-left: var(--space-3);
+        margin-bottom: var(--space-2);
+      }
+      .qa-content li {
+        margin-bottom: var(--space-1);
+      }
+      .qa-badge {
+        font-family: monospace;
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #ffffff;
+        text-transform: uppercase;
+        margin-right: 8px;
+        flex-shrink: 0;
+      }
+      .qa-badge.arch { background: #6366f1; }
+      .qa-badge.tech { background: #10b981; }
+      .qa-badge.ops { background: #d97706; }
+      .qa-badge.crit { background: #ef4444; }
+      .qa-badge.ai { background: #8b5cf6; }
+    </style>
   </head>
   <body>
 
@@ -56,6 +145,8 @@
               <li><a href="#saga-orchestration">Cơ chế Saga & Bù trừ</a></li>
               <li><a href="#api-endpoints">Đặc tả API Endpoints</a></li>
               <li><a href="#db-mq-schema">Database & MQ Schema</a></li>
+              <li><a href="#design-patterns">Các Mẫu thiết kế (Design Patterns)</a></li>
+              <li><a href="#presentation-qa">Hỏi đáp Phản biện</a></li>
             </ul>
           </nav>
         </aside>
@@ -920,6 +1011,233 @@
               <div class="callout warning" style="margin-bottom: 0;">
                 <strong>Processed Message Store:</strong> Vì RabbitMQ đảm bảo cơ chế phân phát ít nhất một lần (at-least-once delivery), việc trùng lặp gói tin là hoàn toàn có thể xảy ra. Tất cả các dịch vụ thành phần tham gia Saga đều sở hữu bảng <code>processed_message</code>. Mỗi khi nhận một command/event mới, service thực hiện ghi đè hoặc kiểm tra sự tồn tại của <code>eventId</code> trong bảng này trước khi xử lý nghiệp vụ thực tế. Nếu ID đã tồn tại, thông điệp sẽ bị bỏ qua lập tức nhằm tránh trừ kho 2 lần hoặc xác nhận thanh toán trùng lặp.
               </div>
+            </div>
+          </section>
+
+          <!-- Section 7: Design Patterns inside Order & Payment Services -->
+          <section class="section" id="design-patterns" style="padding: var(--space-4) 0; border-bottom: 1px solid var(--line);">
+            <h2 class="section-title anchor-header">
+              <a href="#design-patterns" class="anchor-link">#</a>
+              Các Mẫu thiết kế (Design Patterns)
+            </h2>
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <p class="kicker">Kiến trúc mã nguồn sạch & Tính bền bỉ của hệ thống</p>
+              <p>
+                Để đảm bảo mã nguồn dễ bảo trì, mở rộng và có khả năng chịu lỗi cao, các mẫu thiết kế (Design Patterns) tiêu chuẩn đã được áp dụng chặt chẽ trong cấu trúc nghiệp vụ nội bộ của cả hai dịch vụ <code>order-service</code> và <code>payment-service</code>.
+              </p>
+            </div>
+
+            <div class="grid-2">
+              <!-- Order Service Patterns -->
+              <div class="card" style="margin-bottom: 0;">
+                <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2);">
+                  <span class="badge" style="background-color: var(--accent-1); color: var(--surface); padding: 4px 8px; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: bold;">Order Service</span>
+                  <h3 style="margin: 0; font-family: 'Lora', serif; font-size: 1.2rem; color: var(--accent-2);">Mẫu thiết kế tại Order Service</h3>
+                </div>
+                <p style="font-size: 0.9rem; margin-bottom: var(--space-3); color: var(--ink);">
+                  Dịch vụ quản lý đơn hàng tập trung vào xử lý trạng thái giao dịch phân tán và ánh xạ mô hình dữ liệu.
+                </p>
+
+                <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+                  <div style="background: var(--surface-2); padding: 12px; border-radius: var(--radius-sm); border-left: 3px solid var(--accent-2);">
+                    <strong style="font-size: 0.9rem; color: var(--ink);">Saga Participant Pattern</strong>
+                    <p style="font-size: 0.85rem; margin-top: 4px; color: var(--ink); line-height: 1.5;">
+                      Đóng vai trò là đối tượng tham gia trong chuỗi giao dịch Saga phân tán. Nhận lệnh từ hàng đợi <code>order.commands.queue</code> để tạo/xác nhận/hủy đơn hàng và xuất bản các sự kiện kết quả lên <code>bookstore.events</code>.
+                    </p>
+                  </div>
+
+                  <div style="background: var(--surface-2); padding: 12px; border-radius: var(--radius-sm); border-left: 3px solid var(--accent-2);">
+                    <strong style="font-size: 0.9rem; color: var(--ink);">Idempotent Consumer Pattern</strong>
+                    <p style="font-size: 0.85rem; margin-top: 4px; color: var(--ink); line-height: 1.5;">
+                      Ngăn chặn xử lý trùng lặp lệnh do gói tin RabbitMQ gửi lại. Lưu trữ và kiểm tra sự tồn tại của <code>eventId</code> trong bảng <code>processed_message</code> trước khi bắt đầu xử lý nghiệp vụ đơn hàng.
+                    </p>
+                  </div>
+
+                  <div style="background: var(--surface-2); padding: 12px; border-radius: var(--radius-sm); border-left: 3px solid var(--accent-2);">
+                    <strong style="font-size: 0.9rem; color: var(--ink);">Builder Pattern</strong>
+                    <p style="font-size: 0.85rem; margin-top: 4px; color: var(--ink); line-height: 1.5;">
+                      Sử dụng Lombok <code>@Builder</code> để khởi tạo các đối tượng Entity phức tạp (như <code>Order</code>, <code>OrderItem</code>) và các DTO linh hoạt, giúp code tường minh, giảm thiểu constructor cồng kềnh.
+                    </p>
+                  </div>
+
+                  <div style="background: var(--surface-2); padding: 12px; border-radius: var(--radius-sm); border-left: 3px solid var(--accent-2);">
+                    <strong style="font-size: 0.9rem; color: var(--ink);">Data Transfer Object (DTO) & Data Mapper</strong>
+                    <p style="font-size: 0.85rem; margin-top: 4px; color: var(--ink); line-height: 1.5;">
+                      Tách biệt Entity DB và đối tượng API DTO qua MapStruct (<code>OrderMapper</code>), giúp cô lập tầng lưu trữ với giao thức truyền thông HTTP/AMQP, tránh lộ cấu trúc DB.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Payment Service Patterns -->
+              <div class="card" style="margin-bottom: 0;">
+                <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2);">
+                  <span class="badge" style="background-color: #d97706; color: var(--surface); padding: 4px 8px; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: bold;">Payment Service</span>
+                  <h3 style="margin: 0; font-family: 'Lora', serif; font-size: 1.2rem; color: var(--accent-2);">Mẫu thiết kế tại Payment Service</h3>
+                </div>
+                <p style="font-size: 0.9rem; margin-bottom: var(--space-3); color: var(--ink);">
+                  Dịch vụ thanh toán tập trung vào tính đa hình của các cổng thanh toán bên thứ ba và xử lý bất đồng bộ.
+                </p>
+
+                <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+                  <div style="background: var(--surface-2); padding: 12px; border-radius: var(--radius-sm); border-left: 3px solid #d97706;">
+                    <strong style="font-size: 0.9rem; color: var(--ink);">Strategy Pattern (Mẫu thiết kế Chiến lược)</strong>
+                    <p style="font-size: 0.85rem; margin-top: 4px; color: var(--ink); line-height: 1.5;">
+                      Đóng gói các giải pháp thanh toán của bên thứ ba (VNPay, MoMo, ZaloPay) vào các lớp dịch vụ độc lập triển khai các giao diện tương ứng (<code>VNPayService</code>, <code>MoMoService</code>, <code>ZaloPayService</code>). Giúp dễ dàng thay thế, cập nhật hoặc sửa lỗi logic của một cổng mà không ảnh hưởng tới các cổng khác.
+                    </p>
+                  </div>
+
+                  <div style="background: var(--surface-2); padding: 12px; border-radius: var(--radius-sm); border-left: 3px solid #d97706;">
+                    <strong style="font-size: 0.9rem; color: var(--ink);">Factory Method / Selector</strong>
+                    <p style="font-size: 0.85rem; margin-top: 4px; color: var(--ink); line-height: 1.5;">
+                      Phương thức <code>createProviderPayment</code> trong <code>PaymentCommandConsumer</code> đóng vai trò như một Factory Method động. Nó phân tích phương thức thanh toán trong <code>CreatePaymentCommand</code> để định tuyến và gọi đúng Strategy thanh toán tương ứng (VNPay, MoMo, ZaloPay).
+                    </p>
+                  </div>
+
+                  <div style="background: var(--surface-2); padding: 12px; border-radius: var(--radius-sm); border-left: 3px solid #d97706;">
+                    <strong style="font-size: 0.9rem; color: var(--ink);">Idempotent Consumer & State Machine Guard</strong>
+                    <p style="font-size: 0.85rem; margin-top: 4px; color: var(--ink); line-height: 1.5;">
+                      Ngăn chặn sự cố xử lý callback IPN trùng lặp từ cổng thanh toán thông qua bảng <code>processed_message</code>. Đồng thời bảo vệ tính toàn vẹn trạng thái giao dịch (chỉ cho phép chuyển đổi <code>PENDING</code> sang <code>COMPLETED</code> / <code>FAILED</code>).
+                    </p>
+                  </div>
+
+                  <div style="background: var(--surface-2); padding: 12px; border-radius: var(--radius-sm); border-left: 3px solid #d97706;">
+                    <strong style="font-size: 0.9rem; color: var(--ink);">Singleton Pattern (Spring Component model)</strong>
+                    <p style="font-size: 0.85rem; margin-top: 4px; color: var(--ink); line-height: 1.5;">
+                      Tất cả các Beans dịch vụ (như <code>VNPayServiceImpl</code>, <code>PaymentCommandConsumer</code>) đều được quản lý bởi Spring Container dưới dạng Singleton. Điều này giúp tối ưu bộ nhớ và tái sử dụng connection pool kết nối tới RabbitMQ và Database.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Section 8: Presentation Q&A -->
+          <section class="section" id="presentation-qa" style="padding: var(--space-4) 0; border-bottom: 1px solid var(--line);">
+            <h2 class="section-title anchor-header">
+              <a href="#presentation-qa" class="anchor-link">#</a>
+              Hỏi đáp Phản biện Đặt hàng & Thanh toán
+            </h2>
+            <div class="card" style="margin-bottom: var(--space-4);">
+              <p class="kicker">Chuẩn bị câu hỏi và trả lời phản biện chuyên sâu</p>
+              <p>
+                Phần này chứa các câu hỏi trọng tâm thường gặp từ Hội đồng phản biện liên quan đến quy trình thanh toán, xử lý lỗi phân tán, cơ chế không trùng lặp và bảo mật tích hợp API bên thứ ba.
+              </p>
+            </div>
+
+            <!-- Group: Q&A Cards -->
+            <div class="qa-group">
+              
+              <!-- Q1 -->
+              <details class="qa-card">
+                <summary class="qa-summary">
+                  <span style="display: flex; align-items: center; gap: var(--space-1);">
+                    <span class="qa-badge crit">Crit</span>
+                    Câu 1: Làm thế nào hệ thống đảm bảo tính không trùng lặp (Idempotency) khi xử lý các sự kiện thanh toán hoặc cập nhật trạng thái đơn hàng từ RabbitMQ và Callbacks cổng thanh toán?
+                  </span>
+                </summary>
+                <div class="qa-content">
+                  <p>Hệ thống Bookstore áp dụng mẫu thiết kế <strong>Idempotent Consumer</strong> để ngăn ngừa trùng lặp xử lý ở cả mức hàng đợi tin nhắn và callback API:</p>
+                  <ul>
+                    <li>
+                      <strong>Processed Message Table:</strong> Mỗi microservice (như <code>order-service</code>, <code>payment-service</code>) sở hữu một bảng cơ sở dữ liệu riêng mang tên <code>processed_message</code>. Khóa chính của bảng này là <code>message_id</code> (tương ứng với <code>eventId</code> của gói tin Saga hoặc mã định danh giao dịch duy nhất từ cổng thanh toán, ví dụ: <code>apptransid</code> của ZaloPay hoặc <code>vnp_TxnRef</code> của VNPay).
+                    </li>
+                    <li>
+                      <strong>Kiểm tra nguyên tử (Atomic Insertion):</strong> Khi nhận sự kiện hoặc callback, service mở một database transaction và chèn ID vào bảng:
+                      <pre style="background: var(--surface-2); padding: 8px 12px; border-radius: var(--radius-sm); font-family: monospace; font-size: 0.85rem; border: 1px solid var(--line); margin: 6px 0;">INSERT INTO processed_message (message_id, processed_at) VALUES (?, NOW());</pre>
+                      Nếu lệnh chèn thành công, service mới tiếp tục xử lý nghiệp vụ. Nếu xảy ra ngoại lệ trùng khóa chính (Duplicate Key), service hiểu rằng tin nhắn này đã được xử lý xong từ trước, lập tức gửi ACK về cho RabbitMQ (hoặc trả về kết quả thành công cho cổng thanh toán) và hủy bỏ xử lý nghiệp vụ để tránh trừ kho 2 lần hoặc nhân đôi tiền giao dịch.
+                    </li>
+                    <li>
+                      <strong>Kiểm tra trạng thái (State Transition Guard):</strong> Tại tầng ứng dụng, hệ thống chỉ cho phép cập nhật trạng thái đơn hàng/giao dịch nếu trạng thái hiện tại là <code>PENDING</code>. Mọi trạng thái cuối (như <code>SUCCESS</code>, <code>FAILED</code>) đều không được phép chuyển đổi ngược lại.
+                    </li>
+                  </ul>
+                </div>
+              </details>
+
+              <!-- Q2 -->
+              <details class="qa-card">
+                <summary class="qa-summary">
+                  <span style="display: flex; align-items: center; gap: var(--space-1);">
+                    <span class="qa-badge arch">Arch</span>
+                    Câu 2: Luồng đặt hàng COD và Online Payment có sự khác biệt gì trong máy trạng thái (Saga State Machine)? Làm thế nào Saga Orchestrator điều phối chung cả hai?
+                  </span>
+                </summary>
+                <div class="qa-content">
+                  <p>Để tối ưu hóa mã nguồn và đơn giản hóa kiến trúc, cả hai phương thức thanh toán đều chia sẻ chung một máy trạng thái (Saga State Machine) điều phối bởi <code>bookstore-saga-orchestrator-service</code>. Sự khác biệt chỉ được quyết định ở cách <code>payment-service</code> xử lý lệnh khởi tạo:</p>
+                  <ol>
+                    <li>
+                      <strong>Phương thức COD (Thanh toán khi nhận hàng):</strong>
+                      <ul>
+                        <li>Khi nhận lệnh <code>payment.create.command</code>, <code>payment-service</code> nhận diện phương thức thanh toán là COD.</li>
+                        <li>Nó sẽ lưu bản ghi thanh toán vào DB của mình với trạng thái <code>PAYMENT_SKIPPED</code> (bỏ qua thanh toán trực tuyến) và không thực hiện gọi API của bên thứ ba để sinh link thanh toán.</li>
+                        <li>Ngay lập tức, <code>payment-service</code> phản hồi lại sự kiện <code>payment.completed</code> cho Saga Orchestrator. Saga nhận tin nhắn này và tiếp tục chuyển tiếp sang bước tạo vận đơn giao hàng và xóa giỏ hàng thông thường.</li>
+                      </ul>
+                    </li>
+                    <li>
+                      <strong>Phương thức Online Payment (VNPay/MoMo/ZaloPay):</strong>
+                      <ul>
+                        <li>Khi nhận lệnh <code>payment.create.command</code>, <code>payment-service</code> gọi API tích hợp của cổng thanh toán tương ứng để lấy <code>paymentUrl</code>, lưu bản ghi thanh toán dưới trạng thái <code>PENDING</code>.</li>
+                        <li>Nó gửi lại sự kiện <code>payment.created</code> (chứa <code>paymentUrl</code>) cho Saga. Saga tạm dừng chuỗi xử lý và trả URL về cho Next.js Frontend để chuyển hướng người dùng sang trang thanh toán.</li>
+                        <li>Khi người dùng hoàn tất thanh toán và cổng thanh toán gọi callback IPN về cho <code>payment-service</code>, service này mới publish sự kiện <code>payment.completed</code> lên RabbitMQ để kích hoạt Saga chạy tiếp các bước còn lại.</li>
+                      </ul>
+                    </li>
+                  </ol>
+                </div>
+              </details>
+
+              <!-- Q3 -->
+              <details class="qa-card">
+                <summary class="qa-summary">
+                  <span style="display: flex; align-items: center; gap: var(--space-1);">
+                    <span class="qa-badge arch">Arch</span>
+                    Câu 3: Trong trường hợp người dùng đã thanh toán trực tuyến thành công, nhưng bước tạo vận đơn giao hàng (gọi API sang GHN) bị thất bại, hệ thống thực hiện bù trừ (Compensation) như thế nào?
+                  </span>
+                </summary>
+                <div class="qa-content">
+                  <p>Khi xảy ra lỗi ở bất kỳ bước nào sau khi đã thanh toán thành công (ví dụ: <code>shipping-service</code> gọi API GHN lỗi hoặc <code>book-service</code> bị lỗi kho hàng), Saga Orchestrator sẽ tự động kích hoạt chuỗi **giao dịch bù trừ (Compensating Transactions)** để khôi phục tính nhất quán:</p>
+                  <ul>
+                    <li><strong>Hủy đơn hàng:</strong> Saga gửi <code>order.cancel.command</code> để <code>order-service</code> chuyển trạng thái đơn hàng từ <code>PENDING</code> sang <code>CANCELLED</code>.</li>
+                    <li><strong>Hoàn tồn kho và Mã giảm giá:</strong> Saga gửi các lệnh giải phóng tồn kho cho <code>book-service</code> và khôi phục mã giảm giá cho <code>promotion-service</code> để người dùng có thể sử dụng lại mã đó cho đơn hàng sau.</li>
+                    <li><strong>Tự động hoàn tiền (Auto-refund API):</strong> Saga gửi lệnh <code>payment.refund.command</code> tới <code>payment-service</code>. Dựa trên <code>sagaId</code> và mã giao dịch gốc, <code>payment-service</code> sẽ gửi yêu cầu hoàn tiền (Refund Request) thông qua API hoàn tiền của cổng thanh toán tương ứng (như VNPay Refund, MoMo Refund, hoặc ZaloPay Refund). Khi cổng thanh toán xác nhận hoàn tất, trạng thái thanh toán được cập nhật thành <code>REFUNDED</code>.</li>
+                    <li><strong>Thông báo lỗi:</strong> Saga Orchestrator gửi sự kiện kết thúc lỗi <code>checkout.failed</code> để <code>notification-service</code> gửi thông báo hoặc email xác nhận hoàn tiền và giải thích lý do hủy đơn cho người dùng.</li>
+                  </ul>
+                </div>
+              </details>
+
+              <!-- Q4 -->
+              <details class="qa-card">
+                <summary class="qa-summary">
+                  <span style="display: flex; align-items: center; gap: var(--space-1);">
+                    <span class="qa-badge crit">Crit</span>
+                    Câu 4: Nhóm hãy phân tích lỗ hổng bảo mật Checksum Bypass trong ZaloPay Redirect Callback và cách khắc phục triệt để?
+                  </span>
+                </summary>
+                <div class="qa-content">
+                  <p>Lỗ hổng bảo mật này nằm ở tầng logic xác thực chữ ký (Checksum/Signature Validation) khi người dùng hoàn tất thanh toán và được chuyển hướng về trang web:</p>
+                  <ul>
+                    <li>
+                      <strong>Nguyên nhân lỗ hổng:</strong> Trong file <code>PaymentController.java</code> tại endpoint <code>/api/v1/payment/zalopay/return</code>, logic kiểm tra checksum của hệ thống được viết:
+                      <pre style="background: var(--surface-2); padding: 8px 12px; border-radius: var(--radius-sm); font-family: monospace; font-size: 0.85rem; border: 1px solid var(--line); margin: 6px 0;">if (checksum == null || checksum.isEmpty()) { return true; }</pre>
+                      Nếu tham số <code>checksum</code> bị thiếu hoặc rỗng, hệ thống sẽ bỏ qua kiểm tra và trả về <code>true</code> (xác thực thành công). Kẻ tấn công chỉ cần gọi trực tiếp URL redirect và cố ý xóa tham số <code>checksum</code> khỏi URL để hệ thống tự động cập nhật trạng thái đơn hàng thành đã thanh toán thành công mà không cần trả tiền thật.
+                    </li>
+                    <li>
+                      <strong>Giải pháp khắc phục triệt để:</strong>
+                      <ol>
+                        <li>
+                          <strong>Bắt buộc có checksum:</strong> Không chấp nhận checksum trống hoặc rỗng. Nếu checksum bị trống, ném lỗi <code>400 Bad Request</code> hoặc <code>401 Unauthorized</code> ngay lập tức.
+                        </li>
+                        <li>
+                          <strong>Xác thực chữ ký HMAC-SHA256 nghiêm ngặt:</strong> Lấy các tham số trả về (như <code>appid</code>, <code>apptransid</code>, <code>status</code>, <code>amount</code>) kết hợp với khóa bí mật (Secret Key 2) được cấu hình trên server để tính toán lại chữ ký HMAC-SHA256 và đối chiếu chính xác với <code>checksum</code> nhận được.
+                        </li>
+                        <li>
+                          <strong>Không tin tưởng Client-side Redirect:</strong> Hướng đi chuẩn là chỉ dùng Redirect URL để cập nhật giao diện người dùng tạm thời. Trạng thái thanh toán chính thức trong database bắt buộc chỉ được cập nhật dựa trên luồng IPN (Instant Payment Notification / Callback Server-to-Server) được gọi trực tiếp và an toàn từ ZaloPay, kết hợp với việc chủ động gửi request gọi Query API để truy vấn trạng thái đơn hàng trực tiếp từ cổng thanh toán trước khi xác nhận đơn hàng thành công.
+                        </li>
+                      </ol>
+                    </li>
+                  </ul>
+                </div>
+              </details>
+
             </div>
           </section>
 

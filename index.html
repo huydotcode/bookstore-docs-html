@@ -89,7 +89,7 @@
                     <tr><td><strong>GroupId (pom.xml)</strong></td><td><code>com.hamtech</code></td></tr>
                     <tr><td><strong>Java Package Root</strong></td><td><code>com.notfound.&lt;serviceName&gt;</code></td></tr>
                     <tr><td><strong>Môi trường Local</strong></td><td>Docker Compose / Docker Network</td></tr>
-                    <tr><td><strong>Môi trường Deploy</strong></td><td>Kubernetes / EC2 AWS</td></tr>
+                    <tr><td><strong>Môi trường Deploy</strong></td><td>Kubernetes (K8s)</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -646,6 +646,7 @@ docker compose up --build -d</pre>
                   <ul>
                     <li><strong>Đánh đổi tính nhất quán tức thời (Immediate Consistency):</strong> Chấp nhận nhất quán sau (Eventual Consistency) &rarr; Code Saga và các luồng rollback phức tạp hơn Monolith rất nhiều.</li>
                     <li><strong>Độ trễ mạng (Network Latency):</strong> Giao tiếp chéo qua các service thông qua Feign/RabbitMQ tốn thời gian hơn gọi trong bộ nhớ &rarr; Tối ưu bằng cách cache Redis giỏ hàng và thiết lập cơ chế nạp sẵn dữ liệu (Eager Loading).</li>
+                    <li><strong>Single Point of Failure (SPOF) tại API Gateway:</strong> Nếu API Gateway sập, hệ thống tê liệt hoàn toàn &rarr; Khắc phục bằng cách chạy song song nhiều Gateway đằng sau Load Balancer (Nginx / Kubernetes LoadBalancer).</li>
                   </ul>
                 </div>
               </details>
@@ -913,7 +914,7 @@ docker compose up --build -d</pre>
                   <p>Hệ thống Bookstore tuyệt đối không lưu trữ cứng (hardcode) thông tin nhạy cảm trong mã nguồn nhằm tuân thủ quy chuẩn bảo mật:</p>
                   <ul>
                     <li><strong>Môi trường Local:</strong> Các biến nhạy cảm được cấu hình tập trung tại tệp tin <code>.env</code> trong thư mục [Plan-And-Document](file:///d:/Projects/book-store-ktpm/source/Plan-And-Document) và được đưa vào <code>.gitignore</code> để ngăn chặn việc rò rỉ mã nguồn lên GitHub.</li>
-                    <li><strong>Môi trường Production (Deploy K8s):</strong> Các API keys (như Gemini, ZaloPay, MoMo, VNPay) và thông tin đăng nhập database được lưu trữ dưới dạng <strong>Kubernetes Secrets</strong> (hoặc AWS Secrets Manager). Khi container khởi động, các secrets này được nạp động làm biến môi trường (Environment Variables) giúp bảo mật tối đa.</li>
+                    <li><strong>Môi trường Production (Deploy K8s):</strong> Các API keys (như Gemini, ZaloPay, MoMo, VNPay) và thông tin đăng nhập database được lưu trữ dưới dạng <strong>Kubernetes Secrets</strong>. Khi container khởi động, các secrets này được nạp động làm biến môi trường (Environment Variables) giúp bảo mật tối đa.</li>
                   </ul>
                 </div>
               </details>
